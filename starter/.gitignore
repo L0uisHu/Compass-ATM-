@@ -1,0 +1,33 @@
+# Secrets - NEVER commit
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Vector store output (ignore by default; commit if you want to ship a prebuilt index)
+*.faiss
+*.index
+chroma_db/
+*.sqlite
+*.sqlite3
+*.db

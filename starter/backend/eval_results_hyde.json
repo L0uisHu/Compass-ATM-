@@ -1,0 +1,118 @@
+[
+  {
+    "n": 1,
+    "question": "What is the price of an annual ATM transit pass for students under 27 in Milan, and how does it compare with the standard adult annual urban pass?",
+    "elapsed_s": 10.81,
+    "ok": true,
+    "answer": "The annual student ATM pass costs **about €200**. [source: relocation/www-collegiate-it-quanto-costa-studiare-a-milano.md]\n\nI don’t have information on the **standard adult annual urban pass** in the available sources, so I can’t compare the two annual prices.",
+    "sources": [
+      "relocation/www-collegiate-it-quanto-costa-studiare-a-milano.md"
+    ],
+    "verticale": "relocation"
+  },
+  {
+    "n": 2,
+    "question": "List the steps an international student must follow to register with Italy's National Health Service (SSN) in Milan.",
+    "elapsed_s": 23.29,
+    "ok": true,
+    "answer": "1. **Check your category and eligibility.** EU/EEA/Swiss students in Italy for study reasons for more than 3 months can register with the Regional Health Service (SSR). [source: life_on_campus/www-unibocconi-it-en-current-students-campus-life-health-service.md] Non-EU students in Italy for study reasons with a residence permit longer than 3 months can register with the SSR. [source: life_on_campus/www-unibocconi-it-en-current-students-campus-life-national-health-service.md]\n\n2. **Go to a “Scelta e Revoca” counter at ATS Milano.** Registration is done in person at the “Scelta e Revoca” counter at ATS Milano. [source: life_on_campus/www-unibocconi-it-en-current-students-campus-life-national-health-service.md]\n\n3. **Bring the required documents.**  \n   - **EU/EEA/Swiss students:** bring a photocopy of a valid ID, fiscal code, and completed S1 form. [source: life_on_campus/www-unibocconi-it-en-current-students-campus-life-health-service.md]  \n   - **Non-EU students:** bring a valid residence permit or receipt of first residence permit request, self-certification of residence/habitual domicile, Italian fiscal code, and receipt of payment for voluntary SSN registration. [source: life_on_campus/www-unibocconi-it-en-current-students-campus-life-national-health-service.md]\n\n4. **Pay the annual fee if you are registering voluntarily.** Non-EU students must provide the receipt of payment made by postal order to c/c 379222, addressed to “Amministrazione P.T. Regione Lombardia,” with reason “iscrizione volontaria al SSN.” [source: life_on_campus/www-unibocconi-it-en-current-students-campus-life-national-health-service.md]\n\n5. **Choose your doctor during registration.** Registration with the Regional Health Service involves choosing a medico curante, normally among doctors in your local area. [source: relocation/www-serviziterritoriali-asstmilano-it-servizi-iscrizione-al-servizio-sanitario-regionale-e-scelta-del-medico.md]\n\n6. **Receive your health card.** At registration, you receive a temporary paper health card, and the Carta Regionale dei Servizi is usually sent to your residence address within about one month. [source: relocation/www-serviziterritoriali-asstmilano-it-servizi-iscrizione-al-servizio-sanitario-regionale-e-scelta-del-medico.md]",
+    "sources": [
+      "life_on_campus/www-unibocconi-it-en-current-students-campus-life-health-service.md",
+      "life_on_campus/www-unibocconi-it-en-current-students-campus-life-national-health-service.md",
+      "relocation/www-serviziterritoriali-asstmilano-it-servizi-iscrizione-al-servizio-sanitario-regionale-e-scelta-del-medico.md"
+    ],
+    "verticale": "life_on_campus"
+  },
+  {
+    "n": 3,
+    "question": "Confrontando i bus diretti da Malpensa a Milano Centrale tra i vettori documentati (Autostradale/Malpensa Bus Express, Terravision, Flibco, FlixBus): qual e' il prezzo di partenza piu' basso indicato per ciascun vettore?",
+    "elapsed_s": 17.44,
+    "ok": true,
+    "answer": "Ecco il confronto dei prezzi di partenza più bassi indicati:\n\n| Vettore | Prezzo di partenza più basso indicato | Nota |\n|---|---:|---|\n| Autostradale / Malpensa Bus Express | **da 4,99€ a persona** | Nella stessa fonte è anche indicato “biglietto singolo: a partire da 8 euro”; il valore più basso riportato è 4,99€. [source: relocation/www-aeroporto-net-aeroporto-milano-malpensa-collegamenti-aeroporto-milano-malpensa.md] |\n| Terravision | **a partire da 6 euro** | La fonte indica biglietti online “a partire da 6-10 euro”. [source: relocation/www-aeroporto-net-aeroporto-milano-malpensa-collegamenti-aeroporto-milano-malpensa.md] |\n| Flibco | **a partire da circa 8 euro** | La fonte indica biglietti “a partire da circa 8-10 euro”. [source: relocation/www-aeroporto-net-aeroporto-milano-malpensa-collegamenti-aeroporto-milano-malpensa.md] |\n| FlixBus | **non documentato per Malpensa–Milano Centrale** | La fonte indica FlixBus da Malpensa verso varie città italiane ed europee, con biglietti da circa 6 euro, ma non documenta un collegamento diretto Malpensa–Milano Centrale. [source: relocation/www-aeroporto-net-aeroporto-milano-malpensa-collegamenti-aeroporto-milano-malpensa.md] |",
+    "sources": [
+      "relocation/www-aeroporto-net-aeroporto-milano-malpensa-collegamenti-aeroporto-milano-malpensa.md"
+    ],
+    "verticale": "relocation"
+  },
+  {
+    "n": 4,
+    "question": "Quale documento devo portare per accedere alla Biblioteca Bocconi, e qual e' la capienza massima dell'edificio?",
+    "elapsed_s": 7.4,
+    "ok": true,
+    "answer": "Per accedere alla Biblioteca Bocconi devi portare la tua Bocconi ID card oppure usare il QRcode generato tramite yoU@B student diary. [source: life_on_campus/bit-unibocconi-it-hc-en-us-articles-4405876182418-how-do-i-get-into-the-library.md]\n\nLa capienza massima della Biblioteca è di 720 persone. [source: life_on_campus/bit-unibocconi-it-hc-en-us-articles-4405876182418-how-do-i-get-into-the-library.md]",
+    "sources": [
+      "life_on_campus/bit-unibocconi-it-hc-en-us-articles-4405876182418-how-do-i-get-into-the-library.md"
+    ],
+    "verticale": "life_on_campus"
+  },
+  {
+    "n": 5,
+    "question": "Provide a structured table of the dining areas available on the Bocconi campus, indicating the location of each and its meal/opening pattern.",
+    "elapsed_s": 14.07,
+    "ok": true,
+    "answer": "| Dining area | Location | Meal / opening pattern |\n|---|---|---|\n| GUD Milano Bocconi | Via Roentgen 1, Grafton Building, ground floor [source: career_readiness/www-unibocconi-it-en-programs-phd-life-milan-and-life-campus.md] | Open Monday to Friday for breakfast, lunch and happy hour [source: career_readiness/www-unibocconi-it-en-programs-phd-life-milan-and-life-campus.md] |\n| Bar Paninoteca Fast Food | Via Sarfatti 25, main building, floor -1 [source: career_readiness/www-unibocconi-it-en-programs-phd-life-milan-and-life-campus.md] | Open Monday to Friday for breakfast and lunch [source: life_on_campus/www-unibocconi-it-en-current-students-funding-dining-areas.md] |\n| Self-service | Via Bocconi 12, Pensionato building, floor -1 [source: career_readiness/www-unibocconi-it-en-programs-phd-life-milan-and-life-campus.md] | Open Monday to Saturday for lunch and dinner, 11:45–14:30 and 19:00–20:30 [source: career_readiness/www-unibocconi-it-en-programs-phd-life-milan-and-life-campus.md] |\n| Self-service closure pattern | Via Bocconi 12 [source: life_on_campus/www-unibocconi-it-en-current-students-funding-dining-areas.md] | Closed on Sundays, holidays including midweek holidays, and during communicated suspension/closure periods [source: life_on_campus/www-unibocconi-it-en-current-students-funding-dining-areas.md] [source: career_readiness/www-unibocconi-it-en-programs-phd-life-milan-and-life-campus.md] |",
+    "sources": [
+      "career_readiness/www-unibocconi-it-en-programs-phd-life-milan-and-life-campus.md",
+      "life_on_campus/www-unibocconi-it-en-current-students-funding-dining-areas.md"
+    ],
+    "verticale": "life_on_campus"
+  },
+  {
+    "n": 6,
+    "question": "For the Bocconi MSc graduate Exchange Program selection score, how are academic GPA, credits, and Bachelor degree grade weighted? Show the weights and explain.",
+    "elapsed_s": 12.09,
+    "ok": true,
+    "answer": "For the Bocconi MSc graduate Exchange Program 2026-27, the selection score is based on **merit** and weighted as follows: [source: study_abroad/www-unibocconi-it-en-current-students-international-mobility-exchange-program-graduate-selection-criteria.md]\n\n| Component | Weight | Meaning |\n|---|---:|---|\n| Academic weighted credit average (**WA**) | **50%** | Your Bocconi weighted GPA/average on credits. [source: study_abroad/www-unibocconi-it-en-current-students-international-mobility-exchange-program-graduate-selection-criteria.md] |\n| Credits earned ratio (**NC / MAX NC**) | **20%** | The number of credits earned divided by the maximum number of credits that can be earned. [source: study_abroad/www-unibocconi-it-en-current-students-international-mobility-exchange-program-graduate-selection-criteria.md] |\n| Bachelor final degree grade — **Laurea Triennale** | **30%** | Your final Bachelor degree grade. [source: study_abroad/www-unibocconi-it-en-current-students-international-mobility-exchange-program-graduate-selection-criteria.md] |\n\nThe resulting score is then **multiplied by 1000** to obtain the final score. [source: study_abroad/www-unibocconi-it-en-current-students-international-mobility-exchange-program-graduate-selection-criteria.md]\n\nFor the credits calculation, Bocconi counts exams from the **1st year, 1st semester study plan** officially taken by **February 3rd, 2026** included. [source: study_abroad/www-unibocconi-it-en-current-students-international-mobility-exchange-program-graduate-selection-criteria.md] Exams outside that study plan, such as **internship, languages, anticipated exams, and anticipated curricular supplementary activities**, are not included. [source: study_abroad/www-unibocconi-it-en-current-students-international-mobility-exchange-program-graduate-selection-criteria.md]",
+    "sources": [
+      "study_abroad/www-unibocconi-it-en-current-students-international-mobility-exchange-program-graduate-selection-criteria.md"
+    ],
+    "verticale": "study_abroad"
+  },
+  {
+    "n": 7,
+    "question": "What is the application deadline for the Bocconi Double Degree program with MIT (Massachusetts Institute of Technology)?",
+    "elapsed_s": 13.61,
+    "ok": true,
+    "answer": "There is no Bocconi Double Degree program with MIT in the available sources; the available Double Degree sources describe the program/timeline but do not list MIT. [source: study_abroad/www-unibocconi-it-en-current-students-international-mobility-double-degree-program-double-degree-selection-during-1st-ye.md] [source: study_abroad/www-unibocconi-it-en-current-students-international-mobility-double-degree-program-application-selection-timeline-referr.md]\n\nFor the Double Degree program generally, applications for all MSc programs run from **November 12 to November 27, 2025, 11:59pm**. [source: study_abroad/www-unibocconi-it-en-current-students-international-mobility-double-degree-program-application-selection-timeline-referr.md]",
+    "sources": [
+      "study_abroad/www-unibocconi-it-en-current-students-international-mobility-double-degree-program-double-degree-selection-during-1st-ye.md",
+      "study_abroad/www-unibocconi-it-en-current-students-international-mobility-double-degree-program-application-selection-timeline-referr.md"
+    ],
+    "verticale": "study_abroad"
+  },
+  {
+    "n": 8,
+    "question": "What is the maximum amount of the Bocconi Merit Award tuition waiver for graduate (Master of Science) students, and what is the format of the award (e.g. tuition waiver only, tuition waiver plus stipend, etc.)?",
+    "elapsed_s": 8.44,
+    "ok": true,
+    "answer": "I don’t have this information in the available sources.",
+    "sources": [
+      "career_readiness/www-sdabocconi-it-en-specialized-master-full-time-executive-msm-fees-and-scholarships.md",
+      "career_readiness/www-unibocconi-it-en-applying-bocconi-master-science-and-ma-programs-funding-international-applicants.md",
+      "career_readiness/www-unibocconi-it-en-applying-bocconi-bachelor-and-law-programs-funding.md",
+      "career_readiness/www-sdabocconi-it-en-mba-executive-mba-full-time-mba-fees-and-scholarships.md",
+      "career_readiness/www-sdabocconi-it-en-specialized-master-full-time-executive-emilux-fees-and-scholarships.md"
+    ],
+    "verticale": "career_readiness"
+  },
+  {
+    "n": 9,
+    "question": "What are the placement results published in the 2026 BESS graduate survey?",
+    "elapsed_s": 3.6,
+    "ok": true,
+    "answer": "I don't have this information in my knowledge base.",
+    "sources": [],
+    "verticale": "career_readiness"
+  },
+  {
+    "n": 10,
+    "question": "How many different paid Bocconi Sport Membership tiers are listed for the 2025/2026 season, and which is the cheapest one available to UB and SDA Bocconi students?",
+    "elapsed_s": 17.67,
+    "ok": true,
+    "answer": "The available source lists **6 Bocconi Sport Membership tiers** for the 2025/2026 season: **3 student tiers** and **3 community tiers**; the Community Premium Fee is listed, but its price is not shown in the available text. [source: life_on_campus/www-bocconisport-eu-en-news-bocconi-sport-membership.md]\n\nFor **UB and SDA Bocconi students**, the cheapest option is the **Student Membership Fee**, at **€27.00**. [source: life_on_campus/www-bocconisport-eu-en-news-bocconi-sport-membership.md]",
+    "sources": [
+      "life_on_campus/www-bocconisport-eu-en-news-bocconi-sport-membership.md"
+    ],
+    "verticale": "life_on_campus"
+  }
+]

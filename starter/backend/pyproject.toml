@@ -1,0 +1,19 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Bocconi AI Buddy - backend"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.136",
+    "uvicorn[standard]>=0.46",
+    "pydantic>=2.13",
+    "openai>=2.33",
+    "python-dotenv>=1.2",
+    "faiss-cpu>=1.8",
+    "rank-bm25>=0.2.2",
+    "tiktoken>=0.8",
+    "tenacity>=9.0",
+    "pyyaml>=6.0",
+    "numpy>=2.0",
+]
