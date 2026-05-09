@@ -14,6 +14,16 @@
   --color-accent-tint: #EEF1FA;
   --color-success: #0F8A5F;
   --color-danger: #C0392B;
+
+  /* Per-vertical accents — used for AnswerCard borders, badges, chips */
+  --color-vert-relocation: #1F3A8A;
+  --color-vert-relocation-tint: #EEF1FA;
+  --color-vert-campus: #0F8A5F;
+  --color-vert-campus-tint: #E6F4EE;
+  --color-vert-study: #B45309;
+  --color-vert-study-tint: #FEF3E0;
+  --color-vert-career: #BE185D;
+  --color-vert-career-tint: #FCE7F3;
 }
 
 * { box-sizing: border-box; }
@@ -45,6 +55,21 @@ textarea { resize: none; }
   background: var(--color-surface-alt);
   border-radius: 6px;
   height: 14px;
+}
+
+/* Voice listening — pulsing red ring on the mic button. */
+@keyframes voice-pulse {
+  0%   { box-shadow: 0 0 0 0   rgba(192, 57, 43, 0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(192, 57, 43, 0); }
+  100% { box-shadow: 0 0 0 0   rgba(192, 57, 43, 0); }
+}
+.voice-listening { animation: voice-pulse 1.4s ease-out infinite; }
+
+/* Subtle dot grid for hero background */
+.hero-grid {
+  background-image: radial-gradient(rgba(14,17,22,0.06) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: -1px -1px;
 }
 
 .sr-only {

@@ -74,6 +74,12 @@ Be especially careful with:
 - Service hours and locations: cite from the source, do not approximate.
 - "What's happening this week" type questions: the data is a frozen snapshot from
   May 2026; if the source does not list a current event, abstain rather than invent.
+
+ABSTAIN AGGRESSIVELY here. Campus questions often probe specific hours, room
+numbers, association names, or current events. If the sources don't contain
+the EXACT fact (a specific number, name, or address), abstain — do not
+generalize from a partial mention. A wrong answer scores -15; abstaining
+scores 0.
 """,
     "study_abroad": """
 This question is about exchange programs, double degrees, partner universities,

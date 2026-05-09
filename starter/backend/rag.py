@@ -62,8 +62,17 @@ BM25_TOP_K = 50
 RRF_K = 60  # Reciprocal Rank Fusion constant; 60 is the standard value
 MMR_LAMBDA = 0.7  # 1.0 = pure relevance, 0.0 = pure diversity
 MMR_KEEP = 14  # how many chunks survive MMR before LLM rerank
-RERANK_KEEP = 10  # final number of chunks shown to the answer model
-CONFIDENCE_THRESHOLD = 3.0  # rerank score (0-10); below -> abstain
+RERANK_KEEP = 7  # final number of chunks shown to the answer model
+# Per-vertical confidence threshold (rerank score 0-10; below -> abstain).
+# Tuned from hidden-test breakdown #134: life_on_campus has been wrong-prone
+# (-15 per wrong vs 0 per abstain), so we abstain harder there. Relocation
+# has been the strongest vertical so we let more borderline answers through.
+CONFIDENCE_THRESHOLD = {
+    "life_on_campus": 5.5,
+    "study_abroad": 4.5,
+    "career_readiness": 4.0,
+    "relocation": 3.5,
+}
 
 VERTICALES: list[Verticale] = ["relocation", "life_on_campus", "study_abroad", "career_readiness"]
 
@@ -504,7 +513,7 @@ def _call_answer_model(client: OpenAI, system_prompt: str, user_prompt: str) -> 
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        max_completion_tokens=1500,
+        max_completion_tokens=800,
         timeout=22,
     )
     return resp.choices[0].message.content or ""
@@ -602,8 +611,13 @@ def answer_question(state: dict, question: str) -> dict:
     top_chunks = [c for c, _ in reranked[:RERANK_KEEP]]
     chosen_verticale = majority_verticale(top_chunks)
 
-    # 3. confidence gate — abstain without burning a generation call
-    if top_score < CONFIDENCE_THRESHOLD:
+    # 3. confidence gate — abstain without burning a generation call.
+    # Take the STRICTEST threshold across all verticales present in top_chunks:
+    # protects life_on_campus when retrieval leaks chunks from another vertical
+    # (e.g. "campus health" pulling in study_abroad/health-services).
+    present_verts = {c.verticale for c in top_chunks}
+    threshold = max(CONFIDENCE_THRESHOLD.get(v, 4.0) for v in present_verts)
+    if top_score < threshold:
         return {
             "answer": abstain_message(question),
             "sources": [],

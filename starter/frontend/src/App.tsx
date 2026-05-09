@@ -1,20 +1,28 @@
 import {
   Fragment,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
-import type { FormEvent, KeyboardEvent } from 'react';
+import type { CSSProperties, FormEvent, KeyboardEvent } from 'react';
 import {
+  BookOpen,
   Briefcase,
   Building2,
   ChevronDown,
+  CircleStop,
   Compass,
+  Database,
+  Globe,
   Mic,
+  MicOff,
   Plane,
   Send,
+  ShieldCheck,
   Sparkles,
+  Volume2,
 } from 'lucide-react';
 
 const BACKEND_URL =
@@ -127,6 +135,149 @@ const ABSTENTION_PATTERN =
 
 const NOTE_PREFIX = /^(note:|worth noting|caveat:|important:|however,)/i;
 
+// Per-vertical accent palette. Used for AnswerCard left border, badge tint,
+// active chip, and source-row dot. Falls back to indigo for unknown verts.
+const VERT_COLOR: Record<Verticale, { fg: string; tint: string }> = {
+  relocation:       { fg: '#1F3A8A', tint: '#EEF1FA' },
+  life_on_campus:   { fg: '#0F8A5F', tint: '#E6F4EE' },
+  study_abroad:     { fg: '#B45309', tint: '#FEF3E0' },
+  career_readiness: { fg: '#BE185D', tint: '#FCE7F3' },
+};
+
+const ITALIAN_MARKERS =
+  / (e|il|la|un|una|del|della|qual|come|quanto|quando|dove|che|cosa|sono|posso) | perch[eé]/i;
+
+function detectLang(text: string): 'it-IT' | 'en-US' {
+  return ITALIAN_MARKERS.test(' ' + text.toLowerCase() + ' ') ? 'it-IT' : 'en-US';
+}
+
+// Strip markdown + citations so TTS reads cleanly (no "asterisk asterisk").
+function stripForSpeech(text: string): string {
+  return text
+    .replace(/\[source:\s*[^\]]+\]/gi, '')
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/^#+\s+/gm, '')
+    .replace(/^\s*[-*]\s+/gm, '')
+    .replace(/\|/g, ' ')
+    .replace(/\n{2,}/g, '. ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+type VoiceState = 'idle' | 'listening' | 'speaking';
+
+type UseVoiceArgs = {
+  onTranscript: (text: string) => void;
+  lang: 'en-US' | 'it-IT';
+};
+
+// Wraps the browser's SpeechRecognition + SpeechSynthesis APIs.
+// Pattern name: "imperative web-API hook" — stable callbacks via useCallback,
+// stateful refs to avoid stale closures inside the recognition handlers.
+function useVoice({ onTranscript, lang }: UseVoiceArgs) {
+  const [state, setState] = useState<VoiceState>('idle');
+  const [supported, setSupported] = useState<{ stt: boolean; tts: boolean }>({
+    stt: false,
+    tts: false,
+  });
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const onTranscriptRef = useRef(onTranscript);
+  onTranscriptRef.current = onTranscript;
+
+  useEffect(() => {
+    const SR =
+      (window as unknown as { SpeechRecognition?: SpeechRecognitionCtor })
+        .SpeechRecognition ||
+      (window as unknown as { webkitSpeechRecognition?: SpeechRecognitionCtor })
+        .webkitSpeechRecognition;
+    const tts =
+      typeof window !== 'undefined' && 'speechSynthesis' in window;
+    setSupported({ stt: !!SR, tts });
+    if (!SR) return;
+    const rec: SpeechRecognitionInstance = new SR();
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.continuous = false;
+    rec.onresult = (event) => {
+      const text = event.results[0]?.[0]?.transcript ?? '';
+      if (text) onTranscriptRef.current(text);
+      setState('idle');
+    };
+    rec.onerror = () => setState('idle');
+    rec.onend = () => setState((s) => (s === 'listening' ? 'idle' : s));
+    recognitionRef.current = rec;
+    return () => {
+      try { rec.abort(); } catch { /* noop */ }
+    };
+  }, []);
+
+  // Keep the language fresh between calls.
+  useEffect(() => {
+    if (recognitionRef.current) recognitionRef.current.lang = lang;
+  }, [lang]);
+
+  const startListening = useCallback(() => {
+    const rec = recognitionRef.current;
+    if (!rec) return;
+    try {
+      rec.lang = lang;
+      rec.start();
+      setState('listening');
+    } catch {
+      setState('idle');
+    }
+  }, [lang]);
+
+  const stopListening = useCallback(() => {
+    try { recognitionRef.current?.stop(); } catch { /* noop */ }
+    setState('idle');
+  }, []);
+
+  const speak = useCallback(
+    (text: string, speechLang: 'en-US' | 'it-IT') => {
+      if (!supported.tts) return;
+      window.speechSynthesis.cancel();
+      const cleaned = stripForSpeech(text);
+      if (!cleaned) return;
+      const utter = new SpeechSynthesisUtterance(cleaned);
+      utter.lang = speechLang;
+      utter.rate = 1.05;
+      utter.onend = () => setState((s) => (s === 'speaking' ? 'idle' : s));
+      utter.onerror = () => setState((s) => (s === 'speaking' ? 'idle' : s));
+      setState('speaking');
+      window.speechSynthesis.speak(utter);
+    },
+    [supported.tts],
+  );
+
+  const stopSpeaking = useCallback(() => {
+    if (supported.tts) window.speechSynthesis.cancel();
+    setState((s) => (s === 'speaking' ? 'idle' : s));
+  }, [supported.tts]);
+
+  return { state, supported, startListening, stopListening, speak, stopSpeaking };
+}
+
+// Minimal local typing for the Web Speech API (TS lib doesn't ship it by default).
+type SpeechRecognitionInstance = {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  continuous: boolean;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+  onresult:
+    | ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void)
+    | null;
+  onerror: ((event: unknown) => void) | null;
+  onend: (() => void) | null;
+};
+type SpeechRecognitionCtor = new () => SpeechRecognitionInstance;
+
 function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [askState, setAskState] = useState<AskState>({ kind: 'idle' });
@@ -134,6 +285,13 @@ function App() {
   const [activeChip, setActiveChip] = useState<ChipKey>('all');
   const [healthStatus, setHealthStatus] =
     useState<'pending' | 'ok' | 'down'>('pending');
+  const [voiceLang, setVoiceLang] = useState<'en-US' | 'it-IT'>('en-US');
+  // Track whether the *next* assistant message should be auto-spoken (i.e., the
+  // current question came in via mic, not keyboard).
+  const speakNextRef = useRef(false);
+  // The id of the message currently being spoken (or null). Lets the speak button
+  // act as a toggle per-message.
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
 
   const threadRef = useRef<HTMLDivElement | null>(null);
   const wasNearBottomRef = useRef(true);
@@ -211,7 +369,18 @@ function App() {
       };
       setMessages((prev) => [...prev, assistantMsg]);
       setAskState({ kind: 'idle' });
+
+      // Auto-speak when the question came via voice. We pick the answer's
+      // likely language by sampling the answer text — backend mirrors the
+      // question's language, so this is usually a no-op vs voiceLang.
+      if (speakNextRef.current) {
+        speakNextRef.current = false;
+        const lang = detectLang(data.answer);
+        voice.speak(data.answer, lang);
+        setSpeakingMessageId(assistantMsg.id);
+      }
     } catch (err) {
+      speakNextRef.current = false;
       const message =
         err instanceof DOMException && err.name === 'AbortError'
           ? 'Compass needed more than 30 seconds. Try a narrower question or retry shortly.'
@@ -220,6 +389,29 @@ function App() {
     } finally {
       window.clearTimeout(timeout);
     }
+  }
+
+  const voice = useVoice({
+    lang: voiceLang,
+    onTranscript: (text) => {
+      // Voice path: mark next answer to be spoken, then submit immediately.
+      speakNextRef.current = true;
+      sendQuestion(text);
+    },
+  });
+
+  // Clear speaking-message highlight when speech ends.
+  useEffect(() => {
+    if (voice.state !== 'speaking') setSpeakingMessageId(null);
+  }, [voice.state]);
+
+  function handleSpeakAnswer(message: Extract<Message, { role: 'assistant' }>) {
+    if (speakingMessageId === message.id && voice.state === 'speaking') {
+      voice.stopSpeaking();
+      return;
+    }
+    voice.speak(message.text, detectLang(message.text));
+    setSpeakingMessageId(message.id);
   }
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -317,7 +509,15 @@ function App() {
                 m.role === 'user' ? (
                   <UserBubble key={m.id} text={m.text} />
                 ) : (
-                  <AnswerCard key={m.id} message={m} />
+                  <AnswerCard
+                    key={m.id}
+                    message={m}
+                    canSpeak={voice.supported.tts}
+                    isSpeaking={
+                      speakingMessageId === m.id && voice.state === 'speaking'
+                    }
+                    onToggleSpeak={() => handleSpeakAnswer(m)}
+                  />
                 ),
               )}
 
@@ -348,6 +548,14 @@ function App() {
               onChange={setComposerValue}
               onSubmit={handleSubmit}
               disabled={isLoading}
+              voiceState={voice.state}
+              voiceSupported={voice.supported.stt}
+              voiceLang={voiceLang}
+              onToggleVoiceLang={() =>
+                setVoiceLang((l) => (l === 'en-US' ? 'it-IT' : 'en-US'))
+              }
+              onMicDown={voice.startListening}
+              onMicStop={voice.stopListening}
             />
           </section>
 
@@ -399,38 +607,123 @@ function EmptyState({
   activeChip: ChipKey;
   onPick: (text: string) => void;
 }) {
-  const suggestions =
-    activeChip === 'all'
-      ? [
-          MODES.relocation.suggestions[0],
-          MODES.life_on_campus.suggestions[0],
-          MODES.study_abroad.suggestions[0],
-          MODES.career_readiness.suggestions[0],
-        ]
-      : MODES[activeChip].suggestions.slice(0, 4);
+  // When a vertical chip is active, show that mode's 3-suggestion deck.
+  // When "all" is active, render four mode cards (one per vertical) — each
+  // showing the mode's first suggestion as a quick pick.
+  const isAll = activeChip === 'all';
 
   return (
-    <section className="py-8 md:py-16 max-w-2xl">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
-        Compass ATM
-      </p>
-      <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-ink mt-2">
-        Ask Bocconi. Navigate Milan.
-      </h2>
-      <p className="text-base text-ink-muted mt-3 max-w-lg">
-        A grounded answer engine for relocation, campus life, exchange, and
-        career questions. Citations come from official sources only.
-      </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-8">
-        {suggestions.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => onPick(s)}
-            className="text-left bg-surface border border-border rounded-xl p-4 text-sm text-ink transition-colors duration-[120ms] hover:border-border-strong active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg shadow-[0_1px_0_rgba(14,17,22,0.04)]"
+    <section className="py-8 md:py-12">
+      {/* Hero */}
+      <div className="hero-grid -mx-2 px-4 py-8 md:py-10 rounded-2xl">
+        <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+          <Sparkles size={12} strokeWidth={2.2} />
+          Compass ATM · grounded RAG
+        </div>
+        <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-ink mt-3">
+          Ask Bocconi. Navigate Milan.
+        </h2>
+        <p className="text-base text-ink-muted mt-3 max-w-xl">
+          A grounded answer engine for relocation, campus life, exchange, and
+          career questions. Every claim is cited; if the sources don't say it,
+          Compass abstains.
+        </p>
+        {/* Capability strip — descriptors only, no invented metrics. */}
+        <ul className="mt-5 flex flex-wrap gap-2">
+          {[
+            { Icon: Database, text: 'Hybrid retrieval (FAISS + BM25)' },
+            { Icon: ShieldCheck, text: 'Grounded — no hallucination' },
+            { Icon: BookOpen, text: 'Inline citations' },
+            { Icon: Volume2, text: 'Voice in & out' },
+          ].map(({ Icon, text }) => (
+            <li
+              key={text}
+              className="inline-flex items-center gap-1.5 text-xs text-ink-muted bg-surface border border-border rounded-full px-2.5 py-1"
+            >
+              <Icon size={12} strokeWidth={2.2} />
+              {text}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Mode deck (when no specific vertical is selected) */}
+      {isAll ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
+          {(['relocation', 'life_on_campus', 'study_abroad', 'career_readiness'] as Verticale[]).map(
+            (v) => {
+              const mode = MODES[v];
+              const accent = VERT_COLOR[v];
+              const suggestion = mode.suggestions[0];
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => onPick(suggestion)}
+                  className="group text-left bg-surface border border-border rounded-xl p-4 transition-colors duration-[120ms] hover:border-border-strong active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg shadow-[0_1px_0_rgba(14,17,22,0.04)]"
+                  style={{ borderLeftColor: accent.fg, borderLeftWidth: 4 }}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md"
+                      style={{ backgroundColor: accent.tint, color: accent.fg }}
+                    >
+                      <mode.Icon size={16} strokeWidth={2.2} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-ink leading-tight">
+                        {mode.label}
+                      </p>
+                      <p className="text-xs text-ink-muted leading-tight mt-0.5">
+                        {mode.description}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-ink mt-3 group-hover:text-ink">
+                    {suggestion}
+                  </p>
+                </button>
+              );
+            },
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
+          {MODES[activeChip as Verticale].suggestions.slice(0, 4).map((s) => {
+            const accent = VERT_COLOR[activeChip as Verticale];
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onPick(s)}
+                className="text-left bg-surface border border-border rounded-xl p-4 text-sm text-ink transition-colors duration-[120ms] hover:border-border-strong active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg shadow-[0_1px_0_rgba(14,17,22,0.04)]"
+                style={{ borderLeftColor: accent.fg, borderLeftWidth: 4 }}
+              >
+                {s}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* How it works — visible info strip explaining the pipeline at a glance */}
+      <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+        {[
+          { Icon: Globe, title: 'Curated corpus', sub: 'Bocconi + Milan sources' },
+          { Icon: Database, title: 'Hybrid retrieval', sub: 'Dense + lexical, fused' },
+          { Icon: Sparkles, title: 'LLM rerank', sub: 'GPT-5.4 scores chunks' },
+          { Icon: ShieldCheck, title: 'Confidence gate', sub: 'Abstain if unsure' },
+        ].map(({ Icon, title, sub }) => (
+          <div
+            key={title}
+            className="bg-surface border border-border rounded-lg p-3"
           >
-            {s}
-          </button>
+            <div className="inline-flex h-6 w-6 items-center justify-center rounded bg-accent-tint text-accent">
+              <Icon size={12} strokeWidth={2.2} />
+            </div>
+            <p className="text-xs font-semibold text-ink mt-2">{title}</p>
+            <p className="text-[11px] text-ink-muted leading-tight">{sub}</p>
+          </div>
         ))}
       </div>
     </section>
@@ -459,11 +752,18 @@ function SkeletonAnswer() {
 
 function AnswerCard({
   message,
+  canSpeak,
+  isSpeaking,
+  onToggleSpeak,
 }: {
   message: Extract<Message, { role: 'assistant' }>;
+  canSpeak: boolean;
+  isSpeaking: boolean;
+  onToggleSpeak: () => void;
 }) {
   const mode = MODES[message.verticale];
   const Icon = mode.Icon;
+  const accent = VERT_COLOR[message.verticale];
 
   const { lead, body, notes, isAbstention, cleanedText } = useMemo(
     () => structureAnswer(message.text),
@@ -471,15 +771,33 @@ function AnswerCard({
   );
 
   const sources = message.sources;
+  // Left-edge accent stripe + tinted badge by vertical.
+  const cardStyle: CSSProperties = {
+    borderLeftColor: accent.fg,
+    borderLeftWidth: 4,
+  };
+  const badgeStyle: CSSProperties = {
+    backgroundColor: accent.tint,
+    color: accent.fg,
+  };
 
   if (isAbstention) {
     return (
-      <article className="bg-surface border border-border rounded-xl p-5 md:p-6">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+      <article
+        className="bg-surface border border-border rounded-xl p-5 md:p-6"
+        style={cardStyle}
+      >
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <span
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider rounded px-2 py-0.5"
+            style={badgeStyle}
+          >
             <Icon size={12} strokeWidth={2.2} />
             {mode.label}
           </span>
+          {canSpeak ? (
+            <SpeakButton isSpeaking={isSpeaking} onClick={onToggleSpeak} />
+          ) : null}
         </div>
         <p className="text-base text-ink-muted">{cleanedText}</p>
         {sources.length > 0 ? (
@@ -490,16 +808,27 @@ function AnswerCard({
   }
 
   return (
-    <article className="bg-surface border border-border rounded-xl p-5 md:p-6">
+    <article
+      className="bg-surface border border-border rounded-xl p-5 md:p-6"
+      style={cardStyle}
+    >
       <div className="flex items-center justify-between gap-3 mb-4">
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
-          <Icon size={12} strokeWidth={2.2} />
-          {mode.label}
-        </span>
-        {sources.length > 0 ? (
-          <span className="text-xs text-ink-muted">
-            {sources.length} source{sources.length === 1 ? '' : 's'}
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider rounded px-2 py-0.5"
+            style={badgeStyle}
+          >
+            <Icon size={12} strokeWidth={2.2} />
+            {mode.label}
           </span>
+          {sources.length > 0 ? (
+            <span className="text-xs text-ink-muted">
+              · {sources.length} source{sources.length === 1 ? '' : 's'}
+            </span>
+          ) : null}
+        </div>
+        {canSpeak ? (
+          <SpeakButton isSpeaking={isSpeaking} onClick={onToggleSpeak} />
         ) : null}
       </div>
 
@@ -533,6 +862,36 @@ function AnswerCard({
   );
 }
 
+function SpeakButton({
+  isSpeaking,
+  onClick,
+}: {
+  isSpeaking: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={isSpeaking ? 'Stop reading aloud' : 'Read answer aloud'}
+      title={isSpeaking ? 'Stop reading aloud' : 'Read answer aloud'}
+      className={[
+        'shrink-0 inline-flex items-center justify-center h-7 w-7 rounded-md border transition-colors',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
+        isSpeaking
+          ? 'bg-accent text-accent-fg border-accent'
+          : 'bg-surface-alt text-ink-muted border-border hover:text-ink hover:border-border-strong',
+      ].join(' ')}
+    >
+      {isSpeaking ? (
+        <CircleStop size={13} strokeWidth={2.2} />
+      ) : (
+        <Volume2 size={13} strokeWidth={2.2} />
+      )}
+    </button>
+  );
+}
+
 function MobileSourcesDetails({ sources }: { sources: string[] }) {
   return (
     <details className="md:hidden mt-4 pt-4 border-t border-border group">
@@ -562,7 +921,7 @@ function EvidencePanel({ messages }: { messages: Message[] }) {
   const sources = latest?.sources ?? [];
 
   return (
-    <section className="bg-surface border border-border rounded-xl p-5 mt-6">
+    <section className="bg-surface border border-border rounded-xl p-5 mt-4">
       <div className="flex items-center justify-between mb-4">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
           Evidence
@@ -613,11 +972,23 @@ function Composer({
   onChange,
   onSubmit,
   disabled,
+  voiceState,
+  voiceSupported,
+  voiceLang,
+  onToggleVoiceLang,
+  onMicDown,
+  onMicStop,
 }: {
   value: string;
   onChange: (v: string) => void;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
   disabled: boolean;
+  voiceState: VoiceState;
+  voiceSupported: boolean;
+  voiceLang: 'en-US' | 'it-IT';
+  onToggleVoiceLang: () => void;
+  onMicDown: () => void;
+  onMicStop: () => void;
 }) {
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -630,12 +1001,25 @@ function Composer({
   }
 
   const canSend = value.trim().length > 0 && !disabled;
+  const isListening = voiceState === 'listening';
+  const micDisabled = disabled || !voiceSupported;
+  const langShort = voiceLang === 'en-US' ? 'EN' : 'IT';
 
   return (
     <form
       onSubmit={onSubmit}
       className="sticky bottom-0 bg-bg/95 backdrop-blur pt-3 pb-[max(env(safe-area-inset-bottom),12px)]"
     >
+      {isListening ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-2 flex items-center gap-2 text-xs text-danger"
+        >
+          <span className="inline-block h-2 w-2 rounded-full bg-danger voice-listening" />
+          <span>Listening… speak naturally, I'll send it when you stop.</span>
+        </div>
+      ) : null}
       <label htmlFor="composer-input" className="sr-only">
         Ask Compass a question
       </label>
@@ -643,20 +1027,62 @@ function Composer({
         <textarea
           id="composer-input"
           rows={1}
-          placeholder="Ask about Bocconi, Milan, exchange, career…"
+          placeholder={
+            isListening ? 'Listening…' : 'Ask about Bocconi, Milan, exchange, career…'
+          }
           value={value}
           disabled={disabled}
           onChange={(e) => onChange(e.currentTarget.value)}
           onKeyDown={handleKeyDown}
           className="flex-1 min-h-[40px] max-h-40 bg-transparent text-base text-ink placeholder:text-ink-subtle outline-none disabled:text-ink-subtle disabled:cursor-not-allowed py-2 px-2"
         />
+        {voiceSupported ? (
+          <button
+            type="button"
+            onClick={onToggleVoiceLang}
+            disabled={disabled || isListening}
+            title={`Voice language: ${voiceLang}. Click to switch.`}
+            aria-label={`Voice language: ${voiceLang}. Click to switch.`}
+            className="hidden sm:inline-flex items-center justify-center h-9 px-2 rounded-md text-[11px] font-semibold tracking-wider text-ink-muted bg-surface-alt border border-border hover:text-ink hover:border-border-strong disabled:opacity-50"
+          >
+            {langShort}
+          </button>
+        ) : null}
         <button
           type="button"
-          disabled
-          aria-label="Voice input (coming soon)"
-          className="inline-flex items-center justify-center h-9 w-9 rounded-md bg-surface-alt text-ink-subtle border border-border cursor-not-allowed"
+          onClick={isListening ? onMicStop : onMicDown}
+          disabled={micDisabled}
+          aria-label={
+            !voiceSupported
+              ? 'Voice input not supported in this browser'
+              : isListening
+                ? 'Stop listening'
+                : 'Start voice input'
+          }
+          title={
+            !voiceSupported
+              ? 'Voice input not supported in this browser'
+              : isListening
+                ? 'Stop listening'
+                : 'Start voice input'
+          }
+          className={[
+            'inline-flex items-center justify-center h-9 w-9 rounded-md border transition-colors',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
+            isListening
+              ? 'bg-danger text-bg border-danger voice-listening'
+              : !voiceSupported
+                ? 'bg-surface-alt text-ink-subtle border-border cursor-not-allowed'
+                : 'bg-surface-alt text-ink-muted border-border hover:bg-surface hover:text-ink hover:border-border-strong',
+          ].join(' ')}
         >
-          <Mic size={16} strokeWidth={2} />
+          {isListening ? (
+            <CircleStop size={16} strokeWidth={2} />
+          ) : !voiceSupported ? (
+            <MicOff size={16} strokeWidth={2} />
+          ) : (
+            <Mic size={16} strokeWidth={2} />
+          )}
         </button>
         <button
           type="submit"
@@ -1012,17 +1438,39 @@ function parseTableRow(line: string) {
 
 // ---------- Source labeler ----------
 
-const TLD_TOKENS = new Set(['com', 'it', 'eu', 'org', 'net', 'xyz', 'io']);
+const TLD_TOKENS = new Set([
+  'com',
+  'it',
+  'eu',
+  'org',
+  'net',
+  'xyz',
+  'io',
+  'edu',
+  'gov',
+  'ac',
+  'info',
+  'co',
+]);
 const GENERIC_PREFIX = new Set([
   'en',
   'it',
   'hc',
   'us',
   'articles',
+  'article',
   'dataset',
   'sintesi',
   'scheda',
   'paese',
+  'help',
+  'support',
+  'knowledge',
+  'kb',
+  'blog',
+  'page',
+  'pages',
+  'p',
 ]);
 const BRAND_LOOKUP: Array<[string, string]> = [
   ['bit.unibocconi', 'Bocconi Help'],
@@ -1085,8 +1533,16 @@ function labelFromPath(path: string): { label: string; caption: string } {
       brand = titleCase(root);
     }
 
-    const labelTail = tail
-      .filter((t) => !GENERIC_PREFIX.has(t))
+    // Drop generic URL noise, then strip leading purely-numeric tokens
+    // (KB article IDs like "4405876182418"). Keep numeric tokens that appear
+    // mid-slug — they often carry meaning ("2024", "ds538").
+    const filtered = tail.filter((t) => !GENERIC_PREFIX.has(t));
+    let start = 0;
+    while (start < filtered.length && /^\d+$/.test(filtered[start])) {
+      start += 1;
+    }
+    const labelTail = filtered
+      .slice(start)
       .map((t) => titleCaseToken(t))
       .join(' ')
       .trim();
