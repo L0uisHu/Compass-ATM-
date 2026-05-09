@@ -1,15 +1,27 @@
 import {
-  FormEvent,
+  Fragment,
   useEffect,
   useMemo,
-  useReducer,
   useRef,
   useState,
 } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
+import {
+  Briefcase,
+  Building2,
+  ChevronDown,
+  Compass,
+  Mic,
+  Plane,
+  Send,
+  Sparkles,
+} from 'lucide-react';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8000';
+const BACKEND_URL =
+  (import.meta.env.VITE_BACKEND_URL as string | undefined) ??
+  'http://localhost:8000';
 
-type ModeKey =
+type Verticale =
   | 'relocation'
   | 'life_on_campus'
   | 'study_abroad'
@@ -18,119 +30,41 @@ type ModeKey =
 type AskResponse = {
   answer: string;
   sources: string[];
-  verticale: ModeKey;
+  verticale: Verticale;
 };
 
-type Confidence = 'HIGH' | 'MEDIUM' | 'LOW';
-
-type ChatMessage =
-  | {
-      id: string;
-      role: 'user';
-      content: string;
-      mode: ModeKey;
-    }
+type Message =
+  | { id: string; role: 'user'; text: string }
   | {
       id: string;
       role: 'assistant';
-      content: string;
-      mode: ModeKey;
+      text: string;
       sources: string[];
+      verticale: Verticale;
       createdAt: number;
     };
 
-type RequestStatus =
+type AskState =
   | { kind: 'idle' }
   | { kind: 'loading'; question: string }
-  | { kind: 'error'; message: string; question: string };
+  | { kind: 'error'; question: string; message: string };
 
-type AppState = {
-  activeMode: ModeKey;
-  messages: ChatMessage[];
-  requestStatus: RequestStatus;
-  evidenceOpen: boolean;
-  highlightedSource: string | null;
-  selectedAssistantId: string | null;
-  modePanelOpen: boolean;
-};
+type ChipKey = 'all' | Verticale;
 
-type AppAction =
-  | { type: 'set_mode'; mode: ModeKey }
-  | { type: 'start_request'; question: string; mode: ModeKey; userId: string }
-  | { type: 'receive_answer'; response: AskResponse; assistantId: string }
-  | { type: 'request_error'; message: string }
-  | { type: 'toggle_evidence'; open?: boolean }
-  | { type: 'highlight_source'; source: string; assistantId: string }
-  | { type: 'clear_highlight' }
-  | { type: 'toggle_mode_panel'; open?: boolean };
-
-type ModeDefinition = {
-  key: ModeKey;
+type ModeMeta = {
+  key: Verticale;
   label: string;
-  shortLabel: string;
   description: string;
-  intro: string;
-  tintVar: string;
-  icon: IconName;
+  Icon: typeof Compass;
   suggestions: string[];
 };
 
-type IconName =
-  | 'compass'
-  | 'building'
-  | 'plane'
-  | 'briefcase'
-  | 'database'
-  | 'send'
-  | 'mic'
-  | 'x'
-  | 'check'
-  | 'chevron';
-
-type SpeechRecognitionResultLike = {
-  readonly length: number;
-  item(index: number): { transcript: string };
-  [index: number]: { transcript: string };
-};
-
-type SpeechRecognitionEventLike = Event & {
-  readonly results: {
-    readonly length: number;
-    item(index: number): SpeechRecognitionResultLike;
-    [index: number]: SpeechRecognitionResultLike;
-  };
-};
-
-type SpeechRecognitionLike = EventTarget & {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-declare global {
-  interface Window {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-    __compassAudioContextState?: AudioContextState | 'unavailable';
-  }
-}
-
-const MODES: Record<ModeKey, ModeDefinition> = {
+const MODES: Record<Verticale, ModeMeta> = {
   relocation: {
     key: 'relocation',
     label: 'Settle in Milan',
-    shortLabel: 'Milan',
     description: 'Visa, housing, transport, city admin.',
-    intro: 'Visa, codice fiscale, rent, SIM. Ask anything about landing in Milan.',
-    tintVar: '--color-vert-relocation',
-    icon: 'compass',
+    Icon: Compass,
     suggestions: [
       'How do I open an Italian bank account as a non-resident?',
       "What's a fair monthly rent budget near Bocconi?",
@@ -140,11 +74,8 @@ const MODES: Record<ModeKey, ModeDefinition> = {
   life_on_campus: {
     key: 'life_on_campus',
     label: 'Campus Life',
-    shortLabel: 'Campus',
     description: 'Library, dining, sport, associations.',
-    intro: 'Library, dining, sports, associations. Find your way around campus.',
-    tintVar: '--color-vert-life-on-campus',
-    icon: 'building',
+    Icon: Building2,
     suggestions: [
       'Can I bring guests into the library?',
       'What dining options are on campus?',
@@ -154,11 +85,8 @@ const MODES: Record<ModeKey, ModeDefinition> = {
   study_abroad: {
     key: 'study_abroad',
     label: 'Study Abroad',
-    shortLabel: 'Abroad',
     description: 'Exchange, double degrees, deadlines.',
-    intro: 'Exchange, double degrees, deadlines, scoring. Plan your semester away.',
-    tintVar: '--color-vert-study-abroad',
-    icon: 'plane',
+    Icon: Plane,
     suggestions: [
       'Which partner universities offer Double Degrees in Finance?',
       'When do exchange applications open?',
@@ -168,11 +96,8 @@ const MODES: Record<ModeKey, ModeDefinition> = {
   career_readiness: {
     key: 'career_readiness',
     label: 'Career',
-    shortLabel: 'Career',
     description: 'Internships, scholarships, salaries.',
-    intro: 'Internships, scholarships, salaries, services. Map your next step.',
-    tintVar: '--color-vert-career-readiness',
-    icon: 'briefcase',
+    Icon: Briefcase,
     suggestions: [
       "What's the average salary for Bocconi MSc Finance grads?",
       'When does the curricular internship application close?',
@@ -181,452 +106,330 @@ const MODES: Record<ModeKey, ModeDefinition> = {
   },
 };
 
-const MODE_ORDER: ModeKey[] = [
+const CHIP_ORDER: ChipKey[] = [
+  'all',
   'relocation',
   'life_on_campus',
   'study_abroad',
   'career_readiness',
 ];
 
-const ABSTENTION_PATTERN =
-  /\b(there is no|there are no|i don't have|i do not have|no information|not in (the )?sources|non ho (informazioni|le informazioni)|non c'è|non risulta|le fonti non)\b/i;
-
-const COST_PATTERN = /€\s?\d[\d.,]*|\bEUR\s?\d[\d.,]*/g;
-const DATE_PATTERN =
-  /\b(?:between\s+[^.!?\n]{3,80}\s+and\s+[^.!?\n]{3,80}|applications?\s+open(?:s|ed)?\s+[^.!?\n]{0,80}|(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:,\s*\d{4})?|\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)(?:\s+\d{4})?)/gi;
-
-function reducer(state: AppState, action: AppAction): AppState {
-  switch (action.type) {
-    case 'set_mode':
-      return { ...state, activeMode: action.mode };
-    case 'start_request': {
-      const userMessage: ChatMessage = {
-        id: action.userId,
-        role: 'user',
-        content: action.question,
-        mode: action.mode,
-      };
-      return {
-        ...state,
-        messages: [...state.messages, userMessage],
-        requestStatus: { kind: 'loading', question: action.question },
-        activeMode: action.mode,
-        modePanelOpen: false,
-      };
-    }
-    case 'receive_answer': {
-      const assistantMessage: ChatMessage = {
-        id: action.assistantId,
-        role: 'assistant',
-        content: action.response.answer,
-        sources: action.response.sources,
-        mode: action.response.verticale,
-        createdAt: Date.now(),
-      };
-      return {
-        ...state,
-        messages: [...state.messages, assistantMessage],
-        requestStatus: { kind: 'idle' },
-        activeMode: action.response.verticale,
-        selectedAssistantId: action.assistantId,
-        modePanelOpen: true,
-      };
-    }
-    case 'request_error':
-      if (state.requestStatus.kind !== 'loading') {
-        return state;
-      }
-      return {
-        ...state,
-        requestStatus: {
-          kind: 'error',
-          message: action.message,
-          question: state.requestStatus.question,
-        },
-      };
-    case 'toggle_evidence':
-      return {
-        ...state,
-        evidenceOpen: action.open ?? !state.evidenceOpen,
-      };
-    case 'highlight_source':
-      return {
-        ...state,
-        evidenceOpen: true,
-        highlightedSource: action.source,
-        selectedAssistantId: action.assistantId,
-      };
-    case 'clear_highlight':
-      return { ...state, highlightedSource: null };
-    case 'toggle_mode_panel':
-      return {
-        ...state,
-        modePanelOpen: action.open ?? !state.modePanelOpen,
-      };
-    default:
-      return state;
-  }
-}
-
-const initialState: AppState = {
-  activeMode: 'relocation',
-  messages: [],
-  requestStatus: { kind: 'idle' },
-  evidenceOpen: false,
-  highlightedSource: null,
-  selectedAssistantId: null,
-  modePanelOpen: false,
+const CHIP_LABEL: Record<ChipKey, string> = {
+  all: 'Ask anything',
+  relocation: 'Settle in Milan',
+  life_on_campus: 'Campus Life',
+  study_abroad: 'Study Abroad',
+  career_readiness: 'Career',
 };
 
+const ABSTENTION_PATTERN =
+  /\b(no information|i don't have|i do not have|not in (the )?sources|non ho (informazioni|le informazioni)|le fonti non)\b/i;
+
+const NOTE_PREFIX = /^(note:|worth noting|caveat:|important:|however,)/i;
+
 function App() {
-  const [state, dispatch] = useReducer(reducer, initialState);
-  const sourceRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [askState, setAskState] = useState<AskState>({ kind: 'idle' });
+  const [composerValue, setComposerValue] = useState('');
+  const [activeChip, setActiveChip] = useState<ChipKey>('all');
+  const [healthStatus, setHealthStatus] =
+    useState<'pending' | 'ok' | 'down'>('pending');
 
-  const assistantMessages = state.messages.filter(
-    (message): message is Extract<ChatMessage, { role: 'assistant' }> =>
-      message.role === 'assistant',
-  );
-  const selectedAssistant =
-    assistantMessages.find((message) => message.id === state.selectedAssistantId) ??
-    assistantMessages.at(-1) ??
-    null;
+  const threadRef = useRef<HTMLDivElement | null>(null);
+  const wasNearBottomRef = useRef(true);
 
-  const latestConfidence = selectedAssistant
-    ? getConfidence(selectedAssistant.content, selectedAssistant.sources)
-    : 'LOW';
-
-  async function askQuestion(question: string, mode = state.activeMode) {
-    const trimmedQuestion = question.trim();
-    if (!trimmedQuestion || state.requestStatus.kind === 'loading') {
-      return;
+  // Poll /health every 30s. Failure mode is silent — dot stays grey.
+  useEffect(() => {
+    let cancelled = false;
+    async function check() {
+      try {
+        const res = await fetch(`${BACKEND_URL}/health`, { method: 'GET' });
+        if (cancelled) return;
+        setHealthStatus(res.ok ? 'ok' : 'down');
+      } catch {
+        if (cancelled) return;
+        setHealthStatus('down');
+      }
     }
+    check();
+    const id = window.setInterval(check, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
-    const userId = crypto.randomUUID();
-    const assistantId = crypto.randomUUID();
-    dispatch({ type: 'start_request', question: trimmedQuestion, mode, userId });
+  // Auto-scroll to bottom only if user was already near the bottom.
+  useEffect(() => {
+    const node = threadRef.current;
+    if (!node) return;
+    if (wasNearBottomRef.current) {
+      node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' });
+    }
+  }, [messages.length, askState.kind]);
+
+  function handleThreadScroll() {
+    const node = threadRef.current;
+    if (!node) return;
+    const distance = node.scrollHeight - (node.scrollTop + node.clientHeight);
+    wasNearBottomRef.current = distance < 120;
+  }
+
+  async function sendQuestion(question: string) {
+    const trimmed = question.trim();
+    if (!trimmed || askState.kind === 'loading') return;
+
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      text: trimmed,
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setAskState({ kind: 'loading', question: trimmed });
+    setComposerValue('');
+    wasNearBottomRef.current = true;
 
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 30_000);
 
     try {
-      const response = await fetch(`${BACKEND_URL}/ask`, {
+      const res = await fetch(`${BACKEND_URL}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: trimmedQuestion }),
+        body: JSON.stringify({ question: trimmed }),
         signal: controller.signal,
       });
-
-      if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
-      }
-
-      const data = (await response.json()) as AskResponse;
-      dispatch({ type: 'receive_answer', response: data, assistantId });
-    } catch (error) {
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = (await res.json()) as AskResponse;
+      const assistantMsg: Message = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        text: data.answer,
+        sources: data.sources ?? [],
+        verticale: data.verticale,
+        createdAt: Date.now(),
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+      setAskState({ kind: 'idle' });
+    } catch (err) {
       const message =
-        error instanceof DOMException && error.name === 'AbortError'
-          ? 'Compass needed more than 30 seconds. Try a narrower question or retry when the backend is back.'
-          : 'Compass could not reach the backend. Your question is still here; retry when the service is available.';
-      dispatch({ type: 'request_error', message });
+        err instanceof DOMException && err.name === 'AbortError'
+          ? 'Compass needed more than 30 seconds. Try a narrower question or retry shortly.'
+          : 'Compass could not reach the backend. Your question is still here — retry when the service is available.';
+      setAskState({ kind: 'error', question: trimmed, message });
     } finally {
       window.clearTimeout(timeout);
     }
   }
 
-  function handleSourceClick(source: string, assistantId: string) {
-    dispatch({ type: 'highlight_source', source, assistantId });
-    window.setTimeout(() => {
-      sourceRefs.current[source]?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
-    }, 80);
-    window.setTimeout(() => dispatch({ type: 'clear_highlight' }), 1_400);
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    sendQuestion(composerValue);
   }
 
+  function handleChipClick(chip: ChipKey) {
+    setActiveChip(chip);
+    if (chip === 'all') return;
+    const first = MODES[chip].suggestions[0];
+    setComposerValue(first);
+  }
+
+  function handleSuggestion(text: string) {
+    setComposerValue(text);
+    sendQuestion(text);
+  }
+
+  const isLoading = askState.kind === 'loading';
+  const isEmpty = messages.length === 0 && askState.kind !== 'loading';
+
   return (
-    <main className="app-shell">
-      <Header
-        activeMode={state.activeMode}
-        onToggleEvidence={() => dispatch({ type: 'toggle_evidence' })}
-      />
-
-      <div className="mobile-modes">
-        <ModePills
-          activeMode={state.activeMode}
-          onSelect={(mode) => dispatch({ type: 'set_mode', mode })}
-        />
-      </div>
-
-      <div className="desktop-layout">
-        <aside className="left-rail" aria-label="Mission modes">
-          {MODE_ORDER.map((mode) => (
-            <ModeTile
-              key={mode}
-              mode={MODES[mode]}
-              active={state.activeMode === mode}
-              onClick={() => dispatch({ type: 'set_mode', mode })}
-            />
-          ))}
-        </aside>
-
-        <section className="chat-column" aria-label="Chat with Compass">
-          <ChatThread
-            activeMode={state.activeMode}
-            messages={state.messages}
-            requestStatus={state.requestStatus}
-            onAsk={askQuestion}
-            onSourceClick={handleSourceClick}
-          />
-
-          <div className="mobile-plan">
-            <button
-              className="mode-panel-toggle"
-              type="button"
-              onClick={() => dispatch({ type: 'toggle_mode_panel' })}
-            >
-              <span>Plan from this answer</span>
-              <Icon name="chevron" />
-            </button>
-            {state.modePanelOpen ? (
-              <ModePanel
-                mode={MODES[selectedAssistant?.mode ?? state.activeMode]}
-                message={selectedAssistant}
-                confidence={latestConfidence}
-              />
-            ) : null}
+    <div className="min-h-screen flex flex-col">
+      {/* Header */}
+      <header className="h-16 px-4 md:px-8 flex items-center justify-between border-b border-border bg-bg">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-accent-tint text-accent">
+            <Compass size={18} strokeWidth={2.2} />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-base md:text-lg font-semibold tracking-tight text-ink leading-none">
+              Compass ATM
+            </h1>
+            <p className="hidden sm:block text-xs text-ink-muted mt-1 leading-none">
+              Ask Bocconi. Navigate Milan.
+            </p>
           </div>
-
-          <Composer
-            activeMode={state.activeMode}
-            disabled={state.requestStatus.kind === 'loading'}
-            onSubmit={askQuestion}
-            retryQuestion={
-              state.requestStatus.kind === 'error'
-                ? state.requestStatus.question
-                : null
-            }
-          />
-        </section>
-
-        <aside className="right-rail" aria-label="Plan and evidence">
-          <ModePanel
-            mode={MODES[selectedAssistant?.mode ?? state.activeMode]}
-            message={selectedAssistant}
-            confidence={latestConfidence}
-          />
-          <EvidenceDrawer
-            message={selectedAssistant}
-            confidence={latestConfidence}
-            highlightedSource={state.highlightedSource}
-            sourceRefs={sourceRefs}
-          />
-        </aside>
-      </div>
-
-      <MobileEvidenceSheet
-        open={state.evidenceOpen}
-        message={selectedAssistant}
-        confidence={latestConfidence}
-        highlightedSource={state.highlightedSource}
-        sourceRefs={sourceRefs}
-        onClose={() => dispatch({ type: 'toggle_evidence', open: false })}
-      />
-    </main>
-  );
-}
-
-function Header({
-  activeMode,
-  onToggleEvidence,
-}: {
-  activeMode: ModeKey;
-  onToggleEvidence: () => void;
-}) {
-  return (
-    <header className="app-header">
-      <div className="wordmark">
-        <span
-          className="wordmark-icon"
-          style={{ '--mode-tint': `var(${MODES[activeMode].tintVar})` }}
-        >
-          <Icon name="compass" />
-        </span>
-        <div>
-          <p className="eyebrow">Bocconi</p>
-          <h1>Compass</h1>
         </div>
-      </div>
-      <button
-        className="icon-button"
-        type="button"
-        aria-label="Open evidence drawer"
-        onClick={onToggleEvidence}
+        <StatusDot status={healthStatus} />
+      </header>
+
+      {/* Chip strip */}
+      <nav
+        aria-label="Mission shortcuts"
+        className="px-4 md:px-8 py-3 border-b border-border bg-bg"
       >
-        <Icon name="database" />
-      </button>
-    </header>
-  );
-}
-
-function ModePills({
-  activeMode,
-  onSelect,
-}: {
-  activeMode: ModeKey;
-  onSelect: (mode: ModeKey) => void;
-}) {
-  return (
-    <div className="mode-pills" aria-label="Mission mode picker">
-      {MODE_ORDER.map((mode) => {
-        const config = MODES[mode];
-        return (
-          <button
-            key={mode}
-            className={`mode-pill ${activeMode === mode ? 'is-active' : ''}`}
-            type="button"
-            style={{ '--mode-tint': `var(${config.tintVar})` }}
-            onClick={() => onSelect(mode)}
-          >
-            <Icon name={config.icon} />
-            <span>{config.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function ModeTile({
-  mode,
-  active,
-  onClick,
-}: {
-  mode: ModeDefinition;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={`mode-tile ${active ? 'is-active' : ''}`}
-      type="button"
-      style={{ '--mode-tint': `var(${mode.tintVar})` }}
-      onClick={onClick}
-    >
-      <span className="tile-icon">
-        <Icon name={mode.icon} />
-      </span>
-      <span>
-        <strong>{mode.label}</strong>
-        <small>{mode.description}</small>
-      </span>
-    </button>
-  );
-}
-
-function ChatThread({
-  activeMode,
-  messages,
-  requestStatus,
-  onAsk,
-  onSourceClick,
-}: {
-  activeMode: ModeKey;
-  messages: ChatMessage[];
-  requestStatus: RequestStatus;
-  onAsk: (question: string, mode?: ModeKey) => void;
-  onSourceClick: (source: string, assistantId: string) => void;
-}) {
-  const currentMode = MODES[activeMode];
-
-  return (
-    <div className="thread">
-      {messages.length === 0 ? (
-        <EmptyState mode={currentMode} onAsk={onAsk} />
-      ) : (
-        <div className="message-list">
-          {messages.map((message) =>
-            message.role === 'user' ? (
-              <article key={message.id} className="message user-message">
-                <p>{message.content}</p>
-              </article>
-            ) : (
-              <article
-                key={message.id}
-                className={`message assistant-message ${
-                  hasAbstention(message.content) ? 'is-abstention' : ''
-                }`}
-                style={{
-                  '--mode-tint': `var(${MODES[message.mode].tintVar})`,
-                }}
+        <div className="max-w-[1200px] mx-auto flex gap-2 overflow-x-auto no-scrollbar md:flex-wrap snap-x snap-mandatory">
+          {CHIP_ORDER.map((chip) => {
+            const active = activeChip === chip;
+            const Icon =
+              chip === 'all' ? Sparkles : MODES[chip as Verticale].Icon;
+            return (
+              <button
+                key={chip}
+                type="button"
+                onClick={() => handleChipClick(chip)}
+                className={[
+                  'snap-start shrink-0 inline-flex items-center gap-2 h-9 px-3 rounded-md text-sm transition-colors duration-[120ms] ease-out',
+                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
+                  active
+                    ? 'bg-accent-tint text-accent border border-transparent font-medium'
+                    : 'bg-surface-alt text-ink-muted border border-transparent hover:bg-surface hover:text-ink hover:border-border',
+                ].join(' ')}
               >
-                <div className="answer-meta">
-                  <span className="mode-badge">
-                    <Icon name={MODES[message.mode].icon} />
-                    {MODES[message.mode].label}
-                  </span>
-                  <span className="source-count">
-                    {message.sources.length} source
-                    {message.sources.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-                <MarkdownAnswer
-                  answer={message.content}
-                  assistantId={message.id}
-                  onSourceClick={onSourceClick}
+                <Icon size={14} strokeWidth={2} />
+                <span className="whitespace-nowrap">{CHIP_LABEL[chip]}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      {/* Main grid */}
+      <div className="flex-1 px-4 md:px-8 pb-4 md:pb-8 min-h-0">
+        <div className="max-w-[1200px] mx-auto md:grid md:grid-cols-[1fr_360px] md:gap-8 h-full">
+          {/* Chat column */}
+          <section
+            aria-label="Chat with Compass"
+            className="flex flex-col min-h-0 h-full"
+          >
+            <div
+              ref={threadRef}
+              onScroll={handleThreadScroll}
+              className="flex-1 overflow-y-auto py-6 space-y-6 min-h-0"
+            >
+              {isEmpty ? (
+                <EmptyState
+                  activeChip={activeChip}
+                  onPick={handleSuggestion}
                 />
-              </article>
-            ),
-          )}
-        </div>
-      )}
+              ) : null}
 
-      {requestStatus.kind === 'loading' ? (
-        <div className="message assistant-message skeleton-message">
-          <div className="skeleton-line wide" />
-          <div className="skeleton-line" />
-          <div className="skeleton-line short" />
-        </div>
-      ) : null}
+              {messages.map((m) =>
+                m.role === 'user' ? (
+                  <UserBubble key={m.id} text={m.text} />
+                ) : (
+                  <AnswerCard key={m.id} message={m} />
+                ),
+              )}
 
-      {requestStatus.kind === 'error' ? (
-        <div className="calm-error" role="status">
-          <strong>Request paused</strong>
-          <span>{requestStatus.message}</span>
-          <button type="button" onClick={() => onAsk(requestStatus.question)}>
-            Try again
-          </button>
+              {isLoading ? <SkeletonAnswer /> : null}
+            </div>
+
+            {askState.kind === 'error' ? (
+              <div
+                role="alert"
+                className="mb-3 bg-bg border border-danger rounded-lg p-3 flex items-start gap-3"
+              >
+                <div className="flex-1 text-sm text-ink">
+                  <p className="font-medium">Request paused</p>
+                  <p className="text-ink-muted mt-1">{askState.message}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => sendQuestion(askState.question)}
+                  className="text-sm text-danger underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-danger rounded"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : null}
+
+            <Composer
+              value={composerValue}
+              onChange={setComposerValue}
+              onSubmit={handleSubmit}
+              disabled={isLoading}
+            />
+          </section>
+
+          {/* Evidence column (desktop) */}
+          <aside
+            aria-label="Evidence"
+            className="hidden md:block md:sticky md:top-4 md:self-start md:max-h-[calc(100vh-7rem)] md:overflow-y-auto"
+          >
+            <EvidencePanel messages={messages} />
+          </aside>
         </div>
-      ) : null}
+      </div>
     </div>
+  );
+}
+
+function StatusDot({ status }: { status: 'pending' | 'ok' | 'down' }) {
+  const cls =
+    status === 'ok'
+      ? 'bg-success'
+      : status === 'down'
+        ? 'bg-danger'
+        : 'bg-ink-subtle';
+  const label =
+    status === 'ok'
+      ? 'Backend online'
+      : status === 'down'
+        ? 'Backend unreachable'
+        : 'Checking backend';
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      title={label}
+      className="inline-flex items-center gap-2 text-xs text-ink-muted"
+    >
+      <span className={`inline-block h-2 w-2 rounded-full ${cls}`} />
+      <span className="hidden sm:inline">
+        {status === 'ok' ? 'online' : status === 'down' ? 'offline' : '…'}
+      </span>
+    </span>
   );
 }
 
 function EmptyState({
-  mode,
-  onAsk,
+  activeChip,
+  onPick,
 }: {
-  mode: ModeDefinition;
-  onAsk: (question: string, mode?: ModeKey) => void;
+  activeChip: ChipKey;
+  onPick: (text: string) => void;
 }) {
+  const suggestions =
+    activeChip === 'all'
+      ? [
+          MODES.relocation.suggestions[0],
+          MODES.life_on_campus.suggestions[0],
+          MODES.study_abroad.suggestions[0],
+          MODES.career_readiness.suggestions[0],
+        ]
+      : MODES[activeChip].suggestions.slice(0, 4);
+
   return (
-    <section
-      className="empty-state"
-      style={{ '--mode-tint': `var(${mode.tintVar})` }}
-    >
-      <div className="empty-icon">
-        <Icon name={mode.icon} />
-      </div>
-      <p className="eyebrow">{mode.label}</p>
-      <h2>{mode.intro}</h2>
-      <div className="suggestion-grid">
-        {mode.suggestions.map((suggestion) => (
+    <section className="py-8 md:py-16 max-w-2xl">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+        Compass ATM
+      </p>
+      <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-ink mt-2">
+        Ask Bocconi. Navigate Milan.
+      </h2>
+      <p className="text-base text-ink-muted mt-3 max-w-lg">
+        A grounded answer engine for relocation, campus life, exchange, and
+        career questions. Citations come from official sources only.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-8">
+        {suggestions.map((s) => (
           <button
-            key={suggestion}
+            key={s}
             type="button"
-            onClick={() => onAsk(suggestion, mode.key)}
+            onClick={() => onPick(s)}
+            className="text-left bg-surface border border-border rounded-xl p-4 text-sm text-ink transition-colors duration-[120ms] hover:border-border-strong active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg shadow-[0_1px_0_rgba(14,17,22,0.04)]"
           >
-            {suggestion}
+            {s}
           </button>
         ))}
       </div>
@@ -634,58 +437,372 @@ function EmptyState({
   );
 }
 
-function MarkdownAnswer({
-  answer,
-  assistantId,
-  onSourceClick,
+function UserBubble({ text }: { text: string }) {
+  return (
+    <div className="flex justify-end">
+      <div className="max-w-[85%] md:max-w-[75%] bg-surface-alt rounded-xl px-4 py-3 text-base text-ink whitespace-pre-wrap">
+        {text}
+      </div>
+    </div>
+  );
+}
+
+function SkeletonAnswer() {
+  return (
+    <div className="space-y-3 py-2" aria-label="Compass is thinking">
+      <div className="skeleton-line" style={{ width: '80%' }} />
+      <div className="skeleton-line" style={{ width: '100%' }} />
+      <div className="skeleton-line" style={{ width: '60%' }} />
+    </div>
+  );
+}
+
+function AnswerCard({
+  message,
 }: {
-  answer: string;
-  assistantId: string;
-  onSourceClick: (source: string, assistantId: string) => void;
+  message: Extract<Message, { role: 'assistant' }>;
 }) {
-  const blocks = useMemo(() => parseMarkdownBlocks(answer), [answer]);
+  const mode = MODES[message.verticale];
+  const Icon = mode.Icon;
+
+  const { lead, body, notes, isAbstention, cleanedText } = useMemo(
+    () => structureAnswer(message.text),
+    [message.text],
+  );
+
+  const sources = message.sources;
+
+  if (isAbstention) {
+    return (
+      <article className="bg-surface border border-border rounded-xl p-5 md:p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+            <Icon size={12} strokeWidth={2.2} />
+            {mode.label}
+          </span>
+        </div>
+        <p className="text-base text-ink-muted">{cleanedText}</p>
+        {sources.length > 0 ? (
+          <MobileSourcesDetails sources={sources} />
+        ) : null}
+      </article>
+    );
+  }
 
   return (
-    <div className="markdown-answer">
-      {blocks.map((block, index) => {
-        if (block.type === 'heading') {
-          const HeadingTag = `h${block.level}` as 'h2' | 'h3';
+    <article className="bg-surface border border-border rounded-xl p-5 md:p-6">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+          <Icon size={12} strokeWidth={2.2} />
+          {mode.label}
+        </span>
+        {sources.length > 0 ? (
+          <span className="text-xs text-ink-muted">
+            {sources.length} source{sources.length === 1 ? '' : 's'}
+          </span>
+        ) : null}
+      </div>
+
+      {lead ? (
+        <p className="text-lg leading-7 font-medium text-ink mb-4">{lead}</p>
+      ) : null}
+
+      <BlockList blocks={body} />
+
+      {notes.length > 0 ? (
+        <div className="mt-5 pt-4 border-t border-border">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted mb-2">
+            Worth noting
+          </p>
+          {notes.length === 1 ? (
+            <p className="text-sm text-ink-muted">{notes[0]}</p>
+          ) : (
+            <ul className="text-sm text-ink-muted list-disc pl-5 space-y-1">
+              {notes.map((n, i) => (
+                <li key={i}>{n}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+
+      {sources.length > 0 ? (
+        <MobileSourcesDetails sources={sources} />
+      ) : null}
+    </article>
+  );
+}
+
+function MobileSourcesDetails({ sources }: { sources: string[] }) {
+  return (
+    <details className="md:hidden mt-4 pt-4 border-t border-border group">
+      <summary className="list-none cursor-pointer text-sm text-accent inline-flex items-center gap-1.5 select-none">
+        <ChevronDown
+          size={14}
+          className="transition-transform group-open:rotate-180"
+        />
+        {sources.length} source{sources.length === 1 ? '' : 's'}
+      </summary>
+      <ul className="mt-3 space-y-1">
+        {sources.map((s) => (
+          <li key={s}>
+            <SourceRow path={s} />
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+function EvidencePanel({ messages }: { messages: Message[] }) {
+  const latest = [...messages]
+    .reverse()
+    .find((m): m is Extract<Message, { role: 'assistant' }> => m.role === 'assistant');
+
+  const sources = latest?.sources ?? [];
+
+  return (
+    <section className="bg-surface border border-border rounded-xl p-5 mt-6">
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+          Evidence
+        </p>
+        {sources.length > 0 ? (
+          <span className="text-xs text-ink-muted">
+            {sources.length} source{sources.length === 1 ? '' : 's'}
+          </span>
+        ) : null}
+      </div>
+
+      {sources.length === 0 ? (
+        <p className="text-sm text-ink-muted">
+          Source rows appear here after Compass answers with citations.
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {sources.map((s) => (
+            <li key={s}>
+              <SourceRow path={s} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function SourceRow({ path }: { path: string }) {
+  const { label, caption } = useMemo(() => labelFromPath(path), [path]);
+  return (
+    <button
+      type="button"
+      title={path}
+      aria-label={`Source: ${label}`}
+      className="w-full text-left rounded-md p-3 transition-colors duration-[120ms] hover:bg-surface-alt focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+    >
+      <p className="text-sm font-medium text-ink">{label}</p>
+      <p className="text-xs text-ink-muted font-mono mt-1 break-all">
+        {caption}
+      </p>
+    </button>
+  );
+}
+
+function Composer({
+  value,
+  onChange,
+  onSubmit,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: (e: FormEvent<HTMLFormElement>) => void;
+  disabled: boolean;
+}) {
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      e.currentTarget.form?.requestSubmit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      onChange('');
+    }
+  }
+
+  const canSend = value.trim().length > 0 && !disabled;
+
+  return (
+    <form
+      onSubmit={onSubmit}
+      className="sticky bottom-0 bg-bg/95 backdrop-blur pt-3 pb-[max(env(safe-area-inset-bottom),12px)]"
+    >
+      <label htmlFor="composer-input" className="sr-only">
+        Ask Compass a question
+      </label>
+      <div className="bg-surface border border-border rounded-lg flex items-end gap-2 p-2 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent/30 transition-colors">
+        <textarea
+          id="composer-input"
+          rows={1}
+          placeholder="Ask about Bocconi, Milan, exchange, career…"
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(e.currentTarget.value)}
+          onKeyDown={handleKeyDown}
+          className="flex-1 min-h-[40px] max-h-40 bg-transparent text-base text-ink placeholder:text-ink-subtle outline-none disabled:text-ink-subtle disabled:cursor-not-allowed py-2 px-2"
+        />
+        <button
+          type="button"
+          disabled
+          aria-label="Voice input (coming soon)"
+          className="inline-flex items-center justify-center h-9 w-9 rounded-md bg-surface-alt text-ink-subtle border border-border cursor-not-allowed"
+        >
+          <Mic size={16} strokeWidth={2} />
+        </button>
+        <button
+          type="submit"
+          disabled={!canSend}
+          className={[
+            'inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-md font-medium text-sm transition-colors',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
+            canSend
+              ? 'bg-accent text-accent-fg hover:bg-[#16306B] active:scale-[0.98]'
+              : 'bg-ink-subtle text-bg cursor-not-allowed',
+          ].join(' ')}
+        >
+          {disabled ? (
+            <Spinner />
+          ) : (
+            <>
+              <Send size={14} strokeWidth={2.2} />
+              <span>Send</span>
+            </>
+          )}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function Spinner() {
+  return (
+    <svg
+      className="animate-spin"
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity="0.3"
+        strokeWidth="3"
+      />
+      <path
+        d="M21 12a9 9 0 0 0-9-9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+// ---------- Block rendering ----------
+
+type Block =
+  | { kind: 'heading'; level: 3 | 4; text: string }
+  | { kind: 'paragraph'; text: string }
+  | { kind: 'list'; ordered: boolean; items: string[] }
+  | { kind: 'table'; rows: string[][] };
+
+function BlockList({ blocks }: { blocks: Block[] }) {
+  return (
+    <div className="space-y-3">
+      {blocks.map((block, i) => {
+        if (block.kind === 'heading') {
+          if (block.level === 3) {
+            return (
+              <h3 key={i} className="text-base font-semibold text-ink mt-2">
+                <Inline text={block.text} />
+              </h3>
+            );
+          }
           return (
-            <HeadingTag key={`${block.type}-${index}`}>
-              <InlineText
-                text={block.text}
-                assistantId={assistantId}
-                onSourceClick={onSourceClick}
-              />
-            </HeadingTag>
+            <h4 key={i} className="text-sm font-semibold text-ink mt-2">
+              <Inline text={block.text} />
+            </h4>
           );
         }
-        if (block.type === 'list') {
-          const ListTag = block.ordered ? 'ol' : 'ul';
+        if (block.kind === 'list') {
+          if (block.ordered) {
+            return (
+              <ol key={i} className="space-y-2 mt-1">
+                {block.items.map((item, idx) => (
+                  <li key={idx} className="flex gap-3 text-base text-ink">
+                    <span className="shrink-0 inline-flex items-center justify-center h-5 w-5 rounded-full bg-accent-tint text-accent text-xs font-semibold mt-0.5">
+                      {idx + 1}
+                    </span>
+                    <span className="flex-1">
+                      <Inline text={item} />
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            );
+          }
           return (
-            <ListTag key={`${block.type}-${index}`}>
-              {block.items.map((item) => (
-                <li key={item}>
-                  <InlineText
-                    text={item}
-                    assistantId={assistantId}
-                    onSourceClick={onSourceClick}
-                  />
+            <ul key={i} className="list-disc pl-5 space-y-1.5 text-base text-ink">
+              {block.items.map((item, idx) => (
+                <li key={idx}>
+                  <Inline text={item} />
                 </li>
               ))}
-            </ListTag>
+            </ul>
           );
         }
-        if (block.type === 'table') {
-          return <SimpleTable key={`${block.type}-${index}`} rows={block.rows} />;
+        if (block.kind === 'table') {
+          const [head, ...body] = block.rows;
+          return (
+            <div key={i} className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr>
+                    {head.map((cell, c) => (
+                      <th
+                        key={c}
+                        className="text-left font-semibold text-ink border-b border-border py-2 pr-3"
+                      >
+                        <Inline text={cell} />
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {body.map((row, r) => (
+                    <tr key={r}>
+                      {row.map((cell, c) => (
+                        <td
+                          key={c}
+                          className="text-ink-muted border-b border-border py-2 pr-3 align-top"
+                        >
+                          <Inline text={cell} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
         }
         return (
-          <p key={`${block.type}-${index}`}>
-            <InlineText
-              text={block.text}
-              assistantId={assistantId}
-              onSourceClick={onSourceClick}
-            />
+          <p key={i} className="text-base text-ink-muted leading-7">
+            <Inline text={block.text} />
           </p>
         );
       })}
@@ -693,587 +810,156 @@ function MarkdownAnswer({
   );
 }
 
-function InlineText({
-  text,
-  assistantId,
-  onSourceClick,
-}: {
-  text: string;
-  assistantId: string;
-  onSourceClick: (source: string, assistantId: string) => void;
-}) {
-  const parts = splitCitationParts(text);
+// Inline formatter handles **bold** and *italic*. No markdown library.
+function Inline({ text }: { text: string }) {
+  const parts = parseInline(text);
   return (
     <>
-      {parts.map((part, index) =>
-        part.type === 'text' ? (
-          <span key={`${part.value}-${index}`}>{part.value}</span>
-        ) : (
-          <button
-            key={`${part.value}-${index}`}
-            className="source-chip"
-            type="button"
-            onClick={() => onSourceClick(part.value, assistantId)}
-          >
-            source: {basename(part.value)}
-          </button>
-        ),
-      )}
+      {parts.map((p, i) => {
+        if (p.kind === 'bold')
+          return <strong key={i} className="font-semibold text-ink">{p.text}</strong>;
+        if (p.kind === 'italic') return <em key={i}>{p.text}</em>;
+        if (p.kind === 'code')
+          return (
+            <code
+              key={i}
+              className="font-mono text-[0.9em] bg-surface-alt rounded px-1 py-0.5"
+            >
+              {p.text}
+            </code>
+          );
+        return <Fragment key={i}>{p.text}</Fragment>;
+      })}
     </>
   );
 }
 
-function SimpleTable({ rows }: { rows: string[][] }) {
-  const [header, ...body] = rows;
-  return (
-    <div className="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            {header.map((cell) => (
-              <th key={cell}>{stripMarkdown(cell)}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {body.map((row, rowIndex) => (
-            <tr key={`${row.join('-')}-${rowIndex}`}>
-              {row.map((cell, cellIndex) => (
-                <td key={`${cell}-${cellIndex}`}>{stripMarkdown(cell)}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+type InlinePart =
+  | { kind: 'text'; text: string }
+  | { kind: 'bold'; text: string }
+  | { kind: 'italic'; text: string }
+  | { kind: 'code'; text: string };
+
+function parseInline(text: string): InlinePart[] {
+  const parts: InlinePart[] = [];
+  // Match in priority: code, bold (**), italic (*).
+  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(text)) !== null) {
+    if (m.index > last) {
+      parts.push({ kind: 'text', text: text.slice(last, m.index) });
+    }
+    const tok = m[0];
+    if (tok.startsWith('**')) {
+      parts.push({ kind: 'bold', text: tok.slice(2, -2) });
+    } else if (tok.startsWith('`')) {
+      parts.push({ kind: 'code', text: tok.slice(1, -1) });
+    } else {
+      parts.push({ kind: 'italic', text: tok.slice(1, -1) });
+    }
+    last = pattern.lastIndex;
+  }
+  if (last < text.length) {
+    parts.push({ kind: 'text', text: text.slice(last) });
+  }
+  return parts.length > 0 ? parts : [{ kind: 'text', text }];
 }
 
-function Composer({
-  activeMode,
-  disabled,
-  retryQuestion,
-  onSubmit,
-}: {
-  activeMode: ModeKey;
-  disabled: boolean;
-  retryQuestion: string | null;
-  onSubmit: (question: string, mode?: ModeKey) => void;
-}) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const hardCapRef = useRef<number | null>(null);
-  const [value, setValue] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
-  const SpeechRecognitionApi =
-    typeof window !== 'undefined'
-      ? window.SpeechRecognition ?? window.webkitSpeechRecognition
-      : undefined;
+// ---------- Answer structuring ----------
 
-  useEffect(() => {
-    return () => stopRecording();
-  }, []);
+type Structured = {
+  lead: string | null;
+  body: Block[];
+  notes: string[];
+  isAbstention: boolean;
+  cleanedText: string;
+};
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const question = value;
-    if (!question.trim()) {
-      return;
-    }
-    onSubmit(question);
-    setValue('');
-  }
+function structureAnswer(raw: string): Structured {
+  const cleaned = stripCitations(raw);
+  const isAbstention = ABSTENTION_PATTERN.test(cleaned);
 
-  function stopRecording() {
-    if (hardCapRef.current) {
-      window.clearTimeout(hardCapRef.current);
-      hardCapRef.current = null;
-    }
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-    setIsRecording(false);
-  }
-
-  function startRecording() {
-    if (!SpeechRecognitionApi || disabled) {
-      return;
-    }
-    if (isRecording) {
-      stopRecording();
-      return;
-    }
-
-    const recognition = new SpeechRecognitionApi();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = navigator.language.toLowerCase().startsWith('it')
-      ? 'it-IT'
-      : 'en-US';
-
-    recognition.onresult = (event) => {
-      let transcript = '';
-      for (let index = 0; index < event.results.length; index += 1) {
-        transcript += event.results[index][0]?.transcript ?? '';
-      }
-      setValue(transcript.trim());
+  if (isAbstention) {
+    return {
+      lead: null,
+      body: [],
+      notes: [],
+      isAbstention: true,
+      cleanedText: cleaned.trim(),
     };
-    recognition.onend = () => {
-      if (hardCapRef.current) {
-        window.clearTimeout(hardCapRef.current);
-        hardCapRef.current = null;
-      }
-      recognitionRef.current = null;
-      setIsRecording(false);
-    };
-    recognition.onerror = () => {
-      recognitionRef.current = null;
-      setIsRecording(false);
-    };
-
-    recognitionRef.current = recognition;
-    setIsRecording(true);
-    recognition.start();
-    hardCapRef.current = window.setTimeout(() => stopRecording(), 30_000);
   }
 
-  return (
-    <div
-      className={`composer-zone ${isRecording ? 'is-listening' : ''}`}
-      style={{ '--mode-tint': `var(${MODES[activeMode].tintVar})` }}
-    >
-      <VoiceBrain active={isRecording} mode={MODES[activeMode]} />
-      <form className="composer" onSubmit={handleSubmit}>
-        <label htmlFor="question-input" className="sr-only">
-          Ask Compass a question
-        </label>
-        <textarea
-          id="question-input"
-          ref={textareaRef}
-          rows={2}
-          placeholder={
-            retryQuestion ?? 'Ask about Bocconi, Milan, exchange, career...'
-          }
-          disabled={disabled}
-          readOnly={isRecording}
-          value={value}
-          onChange={(event) => setValue(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault();
-              event.currentTarget.form?.requestSubmit();
-            }
-          }}
-        />
-        {SpeechRecognitionApi ? (
-          <button
-            className={`icon-button mic-button ${isRecording ? 'is-active' : ''}`}
-            type="button"
-            aria-label={isRecording ? 'Stop voice input' : 'Start voice input'}
-            aria-pressed={isRecording}
-            disabled={disabled}
-            onClick={isRecording ? stopRecording : startRecording}
-          >
-            <Icon name="mic" />
-          </button>
-        ) : null}
-        <button className="send-button" type="submit" disabled={disabled}>
-          <Icon name="send" />
-          <span>Send</span>
-        </button>
-      </form>
-    </div>
-  );
-}
+  const blocks = parseMarkdownBlocks(cleaned);
 
-function VoiceBrain({ active, mode }: { active: boolean; mode: ModeDefinition }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    if (!active || !canvasRef.current) {
-      return undefined;
+  // Pull out "worth noting" paragraphs — by prefix.
+  const notes: string[] = [];
+  const remaining: Block[] = [];
+  for (const b of blocks) {
+    if (b.kind === 'paragraph' && NOTE_PREFIX.test(b.text.trim())) {
+      notes.push(b.text.replace(NOTE_PREFIX, '').trim().replace(/^[:,]\s*/, ''));
+    } else {
+      remaining.push(b);
     }
-
-    let frame = 0;
-    let closed = false;
-    let stream: MediaStream | null = null;
-    let audioContext: AudioContext | null = null;
-    let analyser: AnalyserNode | null = null;
-    const frequencyData = new Uint8Array(128);
-    const dots = Array.from({ length: 42 }, (_, index) => ({
-      angle: (index / 42) * Math.PI * 2,
-      distance: 34 + (index % 7) * 8,
-      base: 1.6 + (index % 5) * 0.35,
-    }));
-
-    async function setupAudio() {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioContext = new AudioContext();
-        window.__compassAudioContextState = audioContext.state;
-        const source = audioContext.createMediaStreamSource(stream);
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
-        draw();
-      } catch {
-        window.__compassAudioContextState = 'unavailable';
-        draw();
-      }
-    }
-
-    function draw() {
-      const canvas = canvasRef.current;
-      if (!canvas || closed) {
-        return;
-      }
-      const context = canvas.getContext('2d');
-      if (!context) {
-        return;
-      }
-      const rect = canvas.getBoundingClientRect();
-      const scale = window.devicePixelRatio || 1;
-      canvas.width = Math.max(1, Math.floor(rect.width * scale));
-      canvas.height = Math.max(1, Math.floor(rect.height * scale));
-      context.setTransform(scale, 0, 0, scale, 0, 0);
-      context.clearRect(0, 0, rect.width, rect.height);
-
-      let mean = 18;
-      if (analyser) {
-        analyser.getByteFrequencyData(frequencyData);
-        mean =
-          frequencyData.reduce((total, value) => total + value, 0) /
-          frequencyData.length;
-      }
-
-      const amplitude = Math.min(1, mean / 95);
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-      context.fillStyle = getComputedStyle(canvas).getPropertyValue('--mode-tint');
-
-      dots.forEach((dot, index) => {
-        const wave = Math.sin(frame / 22 + index * 0.9) * 7 * amplitude;
-        const radius = dot.distance + wave;
-        const x = centerX + Math.cos(dot.angle) * radius;
-        const y = centerY + Math.sin(dot.angle) * radius;
-        context.globalAlpha = 0.18 + amplitude * 0.35;
-        context.beginPath();
-        context.arc(x, y, dot.base + amplitude * 4.5, 0, Math.PI * 2);
-        context.fill();
-      });
-
-      context.globalAlpha = 0.14 + amplitude * 0.18;
-      context.beginPath();
-      context.arc(centerX, centerY, 24 + amplitude * 22, 0, Math.PI * 2);
-      context.fill();
-      context.globalAlpha = 1;
-      frame = requestAnimationFrame(draw);
-    }
-
-    setupAudio();
-
-    return () => {
-      closed = true;
-      cancelAnimationFrame(frame);
-      stream?.getTracks().forEach((track) => track.stop());
-      if (audioContext && audioContext.state !== 'closed') {
-        void audioContext.close().then(() => {
-          window.__compassAudioContextState = 'closed';
-        });
-      } else if (audioContext) {
-        window.__compassAudioContextState = audioContext.state;
-      }
-    };
-  }, [active]);
-
-  if (!active) {
-    return null;
   }
 
-  return (
-    <canvas
-      ref={canvasRef}
-      className="voice-brain"
-      style={{ '--mode-tint': `var(${mode.tintVar})` }}
-      aria-hidden="true"
-    />
-  );
-}
-
-function ModePanel({
-  mode,
-  message,
-  confidence,
-}: {
-  mode: ModeDefinition;
-  message: Extract<ChatMessage, { role: 'assistant' }> | null;
-  confidence: Confidence;
-}) {
-  const plan = useMemo(
-    () => (message ? parsePlan(message.content, confidence) : null),
-    [message, confidence],
-  );
-
-  return (
-    <section
-      className="panel mode-panel"
-      style={{ '--mode-tint': `var(${mode.tintVar})` }}
-    >
-      <div className="panel-header">
-        <span className="panel-icon">
-          <Icon name={mode.icon} />
-        </span>
-        <div>
-          <h2>{mode.label}</h2>
-          <p>Plan from this answer</p>
-        </div>
-      </div>
-
-      <StaticHelper mode={mode.key} />
-
-      {message && confidence === 'LOW' ? (
-        <div className="no-guess-card">
-          <strong>I won't guess</strong>
-          <span>
-            Compass didn't find a confident source for this. Try rephrasing or
-            check the official channel.
-          </span>
-        </div>
-      ) : null}
-
-      {message && confidence !== 'LOW' && plan ? (
-        <>
-          <PlanList title="Action items" items={plan.actions} />
-          <PillGroup title="Costs at a glance" items={plan.costs} />
-          {plan.timeline ? (
-            <div className="timeline-snippet">
-              <span>Timeline</span>
-              <p>{plan.timeline}</p>
-            </div>
-          ) : null}
-        </>
-      ) : null}
-
-      {!message ? (
-        <p className="empty-panel-copy">
-          Ask a question and Compass will turn the answer into a short plan.
-        </p>
-      ) : null}
-    </section>
-  );
-}
-
-function StaticHelper({ mode }: { mode: ModeKey }) {
-  if (mode === 'relocation') {
-    return (
-      <div className="helper-block">
-        <span>Documents to gather</span>
-        {['codice fiscale', 'residence permit', 'bank account', 'Italian SIM'].map(
-          (item) => (
-            <label key={item}>
-              <input type="checkbox" readOnly />
-              {item}
-            </label>
-          ),
-        )}
-      </div>
-    );
+  // Lead = first paragraph if short.
+  let lead: string | null = null;
+  let body = remaining;
+  const first = remaining[0];
+  if (first && first.kind === 'paragraph' && first.text.length <= 220) {
+    lead = first.text;
+    body = remaining.slice(1);
   }
-  if (mode === 'life_on_campus') {
-    return (
-      <div className="helper-block quick-links">
-        <span>Quick links</span>
-        {['Library', 'Dining', 'Sports', 'Associations'].map((item) => (
-          <button key={item} type="button">
-            {item}
-          </button>
-        ))}
-      </div>
-    );
-  }
-  if (mode === 'study_abroad') {
-    return (
-      <div className="helper-block sequence">
-        <span>Timeline at a glance</span>
-        <p>Apply {'->'} Selection {'->'} Pre-departure {'->'} Departure</p>
-      </div>
-    );
-  }
-  return (
-    <div className="helper-block sequence">
-      <span>Next steps</span>
-      <p>Update CV {'->'} Book Career Service slot {'->'} Apply</p>
-    </div>
-  );
+
+  return { lead, body, notes, isAbstention: false, cleanedText: cleaned };
 }
 
-function PlanList({ title, items }: { title: string; items: string[] }) {
-  if (items.length === 0) {
-    return null;
-  }
-  return (
-    <div className="plan-list">
-      <span>{title}</span>
-      {items.map((item) => (
-        <label key={item}>
-          <input type="checkbox" readOnly />
-          <span>{item}</span>
-        </label>
-      ))}
-    </div>
-  );
+function stripCitations(text: string): string {
+  return text.replace(/\[source:\s*[^\]]+\]/gi, '').replace(/[ \t]+\n/g, '\n');
 }
 
-function PillGroup({ title, items }: { title: string; items: string[] }) {
-  if (items.length === 0) {
-    return null;
-  }
-  return (
-    <div className="pill-group">
-      <span>{title}</span>
-      <div>
-        {items.map((item) => (
-          <small key={item}>{item}</small>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function EvidenceDrawer({
-  message,
-  confidence,
-  highlightedSource,
-  sourceRefs,
-}: {
-  message: Extract<ChatMessage, { role: 'assistant' }> | null;
-  confidence: Confidence;
-  highlightedSource: string | null;
-  sourceRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
-}) {
-  const mode = message ? MODES[message.mode] : MODES.relocation;
-  return (
-    <section
-      className="panel evidence-panel"
-      style={{ '--mode-tint': `var(${mode.tintVar})` }}
-    >
-      <div className="evidence-top">
-        <div>
-          <p className="eyebrow">Evidence</p>
-          <h2>Sources</h2>
-        </div>
-        <ConfidencePill confidence={confidence} />
-      </div>
-
-      {message && message.sources.length > 0 ? (
-        <div className="source-list">
-          {message.sources.map((source) => (
-            <div
-              key={source}
-              ref={(element) => {
-                sourceRefs.current[source] = element;
-              }}
-              className={`source-row ${
-                highlightedSource === source ? 'is-highlighted' : ''
-              }`}
-            >
-              <span className="source-dot" />
-              <div>
-                <strong>{basename(source)}</strong>
-                <code>{source}</code>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="empty-panel-copy">
-          Source rows appear here after Compass answers with citations.
-        </p>
-      )}
-    </section>
-  );
-}
-
-function MobileEvidenceSheet({
-  open,
-  message,
-  confidence,
-  highlightedSource,
-  sourceRefs,
-  onClose,
-}: {
-  open: boolean;
-  message: Extract<ChatMessage, { role: 'assistant' }> | null;
-  confidence: Confidence;
-  highlightedSource: string | null;
-  sourceRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
-  onClose: () => void;
-}) {
-  return (
-    <div className={`sheet-shell ${open ? 'is-open' : ''}`} aria-hidden={!open}>
-      <button className="sheet-backdrop" type="button" onClick={onClose} />
-      <div className="sheet-panel" role="dialog" aria-label="Evidence drawer">
-        <button
-          className="icon-button sheet-close"
-          type="button"
-          aria-label="Close evidence drawer"
-          onClick={onClose}
-        >
-          <Icon name="x" />
-        </button>
-        <EvidenceDrawer
-          message={message}
-          confidence={confidence}
-          highlightedSource={highlightedSource}
-          sourceRefs={sourceRefs}
-        />
-      </div>
-    </div>
-  );
-}
-
-function ConfidencePill({ confidence }: { confidence: Confidence }) {
-  return <span className={`confidence-pill ${confidence.toLowerCase()}`}>{confidence}</span>;
-}
-
-type MarkdownBlock =
-  | { type: 'heading'; level: 2 | 3; text: string }
-  | { type: 'paragraph'; text: string }
-  | { type: 'list'; ordered: boolean; items: string[] }
-  | { type: 'table'; rows: string[][] };
-
-function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
+function parseMarkdownBlocks(markdown: string): Block[] {
   const lines = markdown.split('\n');
-  const blocks: MarkdownBlock[] = [];
-  let index = 0;
+  const blocks: Block[] = [];
+  let i = 0;
 
-  while (index < lines.length) {
-    const line = lines[index].trim();
+  while (i < lines.length) {
+    const line = lines[i].trim();
     if (!line) {
-      index += 1;
+      i += 1;
       continue;
     }
 
     if (line.startsWith('### ')) {
-      blocks.push({ type: 'heading', level: 3, text: stripMarkdown(line.slice(4)) });
-      index += 1;
+      blocks.push({ kind: 'heading', level: 4, text: line.slice(4).trim() });
+      i += 1;
       continue;
     }
-
     if (line.startsWith('## ')) {
-      blocks.push({ type: 'heading', level: 2, text: stripMarkdown(line.slice(3)) });
-      index += 1;
+      blocks.push({ kind: 'heading', level: 3, text: line.slice(3).trim() });
+      i += 1;
+      continue;
+    }
+    if (line.startsWith('# ')) {
+      blocks.push({ kind: 'heading', level: 3, text: line.slice(2).trim() });
+      i += 1;
       continue;
     }
 
-    if (isTableLine(line) && lines[index + 1] && isDividerLine(lines[index + 1])) {
+    if (
+      isTableLine(line) &&
+      lines[i + 1] &&
+      isDividerLine(lines[i + 1].trim())
+    ) {
       const rows: string[][] = [];
-      while (index < lines.length && isTableLine(lines[index].trim())) {
-        if (!isDividerLine(lines[index])) {
-          rows.push(parseTableRow(lines[index]));
+      while (i < lines.length && isTableLine(lines[i].trim())) {
+        if (!isDividerLine(lines[i].trim())) {
+          rows.push(parseTableRow(lines[i]));
         }
-        index += 1;
+        i += 1;
       }
-      blocks.push({ type: 'table', rows });
+      blocks.push({ kind: 'table', rows });
       continue;
     }
 
@@ -1281,199 +967,157 @@ function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
     if (listMatch) {
       const ordered = /\d+\./.test(listMatch[1]);
       const items: string[] = [];
-      while (index < lines.length) {
-        const itemMatch = lines[index].trim().match(/^(\d+\.|[-*])\s+(.+)/);
-        if (!itemMatch) {
-          break;
-        }
-        items.push(stripMarkdown(itemMatch[2]));
-        index += 1;
+      while (i < lines.length) {
+        const m = lines[i].trim().match(/^(\d+\.|[-*])\s+(.+)/);
+        if (!m) break;
+        const ord = /\d+\./.test(m[1]);
+        if (ord !== ordered) break;
+        items.push(m[2].trim());
+        i += 1;
       }
-      blocks.push({ type: 'list', ordered, items });
+      blocks.push({ kind: 'list', ordered, items });
       continue;
     }
 
-    const paragraphLines: string[] = [line];
-    index += 1;
+    const para: string[] = [line];
+    i += 1;
     while (
-      index < lines.length &&
-      lines[index].trim() &&
-      !lines[index].trim().match(/^(\d+\.|[-*])\s+(.+)/) &&
-      !lines[index].trim().startsWith('## ') &&
-      !isTableLine(lines[index].trim())
+      i < lines.length &&
+      lines[i].trim() &&
+      !lines[i].trim().match(/^(\d+\.|[-*])\s+(.+)/) &&
+      !lines[i].trim().startsWith('#') &&
+      !isTableLine(lines[i].trim())
     ) {
-      paragraphLines.push(lines[index].trim());
-      index += 1;
+      para.push(lines[i].trim());
+      i += 1;
     }
-    blocks.push({
-      type: 'paragraph',
-      text: stripMarkdown(paragraphLines.join(' ')),
-    });
+    blocks.push({ kind: 'paragraph', text: para.join(' ') });
   }
 
   return blocks;
 }
 
-function parsePlan(answer: string, confidence: Confidence) {
-  if (confidence === 'LOW') {
-    return { actions: [], costs: [], timeline: '' };
-  }
-  const actions = answer
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => /^(\d+\.|[-*])\s+/.test(line))
-    .map((line) => stripMarkdown(line.replace(/^(\d+\.|[-*])\s+/, '')))
-    .filter(Boolean)
-    .slice(0, 6);
-
-  const costs = Array.from(new Set(answer.match(COST_PATTERN) ?? [])).slice(0, 6);
-  const timeline = Array.from(answer.matchAll(DATE_PATTERN))
-    .map((match) => match[0])
-    .slice(0, 3)
-    .join(' | ');
-
-  return { actions, costs, timeline };
-}
-
-function getConfidence(answer: string, sources: string[]): Confidence {
-  const abstains = hasAbstention(answer);
-  if (sources.length === 0 || abstains) {
-    return 'LOW';
-  }
-  if (sources.length >= 2 && answer.length > 300) {
-    return 'HIGH';
-  }
-  return 'MEDIUM';
-}
-
-function hasAbstention(answer: string) {
-  return ABSTENTION_PATTERN.test(answer);
-}
-
-function splitCitationParts(text: string) {
-  const parts: Array<{ type: 'text' | 'source'; value: string }> = [];
-  const pattern = /\[source:\s*([^\]]+)\]/gi;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push({ type: 'text', value: text.slice(lastIndex, match.index) });
-    }
-    parts.push({ type: 'source', value: match[1].trim() });
-    lastIndex = pattern.lastIndex;
-  }
-
-  if (lastIndex < text.length) {
-    parts.push({ type: 'text', value: text.slice(lastIndex) });
-  }
-
-  return parts;
-}
-
-function stripMarkdown(value: string) {
-  return value
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*(.*?)\*/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .trim();
-}
-
 function isTableLine(line: string) {
   return line.startsWith('|') && line.endsWith('|');
 }
-
 function isDividerLine(line: string) {
   return /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(line.trim());
 }
-
 function parseTableRow(line: string) {
   return line
     .replace(/^\||\|$/g, '')
     .split('|')
-    .map((cell) => cell.trim());
+    .map((c) => c.trim());
 }
 
-function basename(path: string) {
+// ---------- Source labeler ----------
+
+const TLD_TOKENS = new Set(['com', 'it', 'eu', 'org', 'net', 'xyz', 'io']);
+const GENERIC_PREFIX = new Set([
+  'en',
+  'it',
+  'hc',
+  'us',
+  'articles',
+  'dataset',
+  'sintesi',
+  'scheda',
+  'paese',
+]);
+const BRAND_LOOKUP: Array<[string, string]> = [
+  ['bit.unibocconi', 'Bocconi Help'],
+  ['unibocconi', 'Bocconi'],
+  ['dati.comune.milano', 'Comune di Milano'],
+  ['comune.milano', 'Comune di Milano'],
+  ['almalaurea', 'AlmaLaurea'],
+  ['viaggiaresicuri', 'Viaggiare Sicuri'],
+  ['roomlessrent', 'Roomless Rent'],
+];
+const PLATFORM_TOKENS = new Set(['wixsite', 'wordpress', 'blogspot']);
+
+function basename(path: string): string {
   return path.split('/').filter(Boolean).at(-1) ?? path;
 }
 
-function Icon({ name }: { name: IconName }) {
-  if (name === 'send') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 11.5 20 4l-7.5 16-2.2-6.3L4 11.5Z" />
-        <path d="m10.3 13.7 4.2-4.2" />
-      </svg>
-    );
+function labelFromPath(path: string): { label: string; caption: string } {
+  try {
+    let p = path;
+    // Strip leading verticale/
+    p = p.replace(/^(relocation|life_on_campus|study_abroad|career_readiness)\//, '');
+    // Strip trailing .md
+    p = p.replace(/\.md$/, '');
+
+    const tokens = p.split('-').filter(Boolean);
+    if (tokens.length === 0) {
+      throw new Error('empty');
+    }
+
+    // Collect domain tokens until we hit a TLD.
+    const domain: string[] = [];
+    let cut = 0;
+    for (let idx = 0; idx < tokens.length; idx += 1) {
+      domain.push(tokens[idx]);
+      if (TLD_TOKENS.has(tokens[idx])) {
+        cut = idx + 1;
+        break;
+      }
+    }
+    if (cut === 0) {
+      // No TLD found — assume first token is domain.
+      cut = 1;
+    }
+    const tail = tokens.slice(cut);
+    const domainStr = domain.join('.');
+
+    // Brand lookup.
+    let brand: string | null = null;
+    for (const [needle, b] of BRAND_LOOKUP) {
+      if (domainStr.includes(needle)) {
+        brand = b;
+        break;
+      }
+    }
+    if (!brand) {
+      // Skip platform tokens; pick first non-platform domain token.
+      const root =
+        domain.find((t) => !PLATFORM_TOKENS.has(t) && !TLD_TOKENS.has(t)) ??
+        domain[0];
+      brand = titleCase(root);
+    }
+
+    const labelTail = tail
+      .filter((t) => !GENERIC_PREFIX.has(t))
+      .map((t) => titleCaseToken(t))
+      .join(' ')
+      .trim();
+
+    let label = labelTail
+      ? `${brand} · ${labelTail}`
+      : brand;
+    if (label.length > 70) {
+      label = label.slice(0, 69).trimEnd() + '…';
+    }
+
+    const caption = tail.length
+      ? `${domainStr} · ${tail.join('/')}`
+      : domainStr;
+
+    return { label, caption };
+  } catch {
+    const fallback = basename(path).replace(/-/g, ' ').replace(/\.md$/, '');
+    return { label: fallback, caption: path };
   }
-  if (name === 'mic') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 4a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3Z" />
-        <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-      </svg>
-    );
-  }
-  if (name === 'database') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <ellipse cx="12" cy="6" rx="7" ry="3" />
-        <path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
-      </svg>
-    );
-  }
-  if (name === 'building') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 21h16M6 21V5l8-2v18M14 8h4v13M9 8h1M9 12h1M9 16h1" />
-      </svg>
-    );
-  }
-  if (name === 'plane') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="m3 11 18-7-7 18-3-8-8-3Z" />
-        <path d="m11 14 4-4" />
-      </svg>
-    );
-  }
-  if (name === 'briefcase') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M9 7V5h6v2M4 8h16v11H4V8Z" />
-        <path d="M4 13h16M10 13v2h4v-2" />
-      </svg>
-    );
-  }
-  if (name === 'x') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M6 6l12 12M18 6 6 18" />
-      </svg>
-    );
-  }
-  if (name === 'check') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="m5 12 4 4L19 6" />
-      </svg>
-    );
-  }
-  if (name === 'chevron') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="m6 9 6 6 6-6" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="8" />
-      <path d="m14.5 9.5-2 5-3 1 2-5 3-1Z" />
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-    </svg>
-  );
+}
+
+function titleCase(s: string): string {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Keep numeric/ID tokens like "ds538" or "2024" verbatim; otherwise capitalize.
+function titleCaseToken(t: string): string {
+  if (/\d/.test(t)) return t;
+  return titleCase(t);
 }
 
 export default App;

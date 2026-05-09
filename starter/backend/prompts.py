@@ -45,7 +45,14 @@ CRITICAL RULES — these override everything else:
 
 6. STYLE. Be concise and direct. For factual questions, lead with the fact.
    For "how do I do X" questions, use a short numbered list.
-   For comparative or computational questions, show the underlying numbers."""
+   For comparative or computational questions, show the underlying numbers.
+
+7. COMPLETENESS. Cover every relevant fact from the sources, but stay tight.
+   For list-type or comparative questions, enumerate items as a compact table or
+   short bullet list — one line per item, the cited fact, no padding. If part of
+   the question is answerable and part is not, answer the answerable part fully
+   in 1-2 sentences and state plainly what is missing in one line.
+   "Grounded, complete, compact" — not verbose, not cherry-picked."""
 
 
 VERTICALE_ADDENDA: dict[Verticale, str] = {

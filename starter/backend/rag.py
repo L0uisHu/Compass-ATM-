@@ -57,13 +57,13 @@ CHUNK_OVERLAP_TOKENS = 100
 EMBED_BATCH_SIZE = 128
 
 # Retrieval
-DENSE_TOP_K = 30
-BM25_TOP_K = 30
+DENSE_TOP_K = 50
+BM25_TOP_K = 50
 RRF_K = 60  # Reciprocal Rank Fusion constant; 60 is the standard value
 MMR_LAMBDA = 0.7  # 1.0 = pure relevance, 0.0 = pure diversity
-MMR_KEEP = 20  # how many chunks survive MMR before LLM rerank
-RERANK_KEEP = 8  # final number of chunks shown to the answer model
-CONFIDENCE_THRESHOLD = 4.0  # rerank score (0-10); below -> abstain
+MMR_KEEP = 14  # how many chunks survive MMR before LLM rerank
+RERANK_KEEP = 10  # final number of chunks shown to the answer model
+CONFIDENCE_THRESHOLD = 3.0  # rerank score (0-10); below -> abstain
 
 VERTICALES: list[Verticale] = ["relocation", "life_on_campus", "study_abroad", "career_readiness"]
 
@@ -480,7 +480,7 @@ def llm_rerank(
             cid = int(entry.get("id"))
             sc = float(entry.get("score"))
             score_by_id[cid] = max(0.0, min(10.0, sc))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, AttributeError):
             continue
 
     scored = [(c, score_by_id.get(i, 0.0)) for i, c in enumerate(candidates)]
@@ -493,9 +493,9 @@ def llm_rerank(
 # ---------------------------------------------------------------------------
 
 @retry(
-    stop=stop_after_attempt(3),
+    stop=stop_after_attempt(1),
     wait=wait_exponential(multiplier=1, min=1, max=8),
-    retry=retry_if_exception_type((RateLimitError, APIError, APITimeoutError)),
+    retry=retry_if_exception_type((RateLimitError, APIError)),
 )
 def _call_answer_model(client: OpenAI, system_prompt: str, user_prompt: str) -> str:
     resp = client.chat.completions.create(
@@ -504,8 +504,8 @@ def _call_answer_model(client: OpenAI, system_prompt: str, user_prompt: str) -> 
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        max_completion_tokens=3000,
-        timeout=25,
+        max_completion_tokens=1500,
+        timeout=22,
     )
     return resp.choices[0].message.content or ""
 
@@ -616,7 +616,9 @@ def answer_question(state: dict, question: str) -> dict:
         f"<sources>\n{_format_sources_block(top_chunks)}\n</sources>\n\n"
         f"Question: {question}\n\n"
         "Answer using ONLY the sources above. Cite each fact inline as [source: <file_path>]. "
-        "If the sources do not contain the answer, abstain in the question's language."
+        "If the sources contain partial information, present every relevant fact you can ground "
+        "with a citation — do not cherry-pick and do not stop short. "
+        "Abstain entirely only if no source contains anything relevant."
     )
 
     try:
