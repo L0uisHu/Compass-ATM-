@@ -45,14 +45,7 @@ CRITICAL RULES — these override everything else:
 
 6. STYLE. Be concise and direct. For factual questions, lead with the fact.
    For "how do I do X" questions, use a short numbered list.
-   For comparative or computational questions, show the underlying numbers.
-
-7. COMPLETENESS. Cover every relevant fact from the sources, but stay tight.
-   For list-type or comparative questions, enumerate items as a compact table or
-   short bullet list — one line per item, the cited fact, no padding. If part of
-   the question is answerable and part is not, answer the answerable part fully
-   in 1-2 sentences and state plainly what is missing in one line.
-   "Grounded, complete, compact" — not verbose, not cherry-picked."""
+   For comparative or computational questions, show the underlying numbers."""
 
 
 VERTICALE_ADDENDA: dict[Verticale, str] = {
@@ -74,12 +67,6 @@ Be especially careful with:
 - Service hours and locations: cite from the source, do not approximate.
 - "What's happening this week" type questions: the data is a frozen snapshot from
   May 2026; if the source does not list a current event, abstain rather than invent.
-
-ABSTAIN AGGRESSIVELY here. Campus questions often probe specific hours, room
-numbers, association names, or current events. If the sources don't contain
-the EXACT fact (a specific number, name, or address), abstain — do not
-generalize from a partial mention. A wrong answer scores -15; abstaining
-scores 0.
 """,
     "study_abroad": """
 This question is about exchange programs, double degrees, partner universities,
